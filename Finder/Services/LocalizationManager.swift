@@ -74,6 +74,7 @@ class LocalizationManager: ObservableObject {
     var antiForward: String { localized("Запрет пересылки", "Anti-Forward") }
     var ipMask: String { localized("Маскировка IP", "IP Masking") }
     var decoyPinTitle: String { localized("Decoy PIN", "Decoy PIN") }
+    var biometricBinding: String { localized("Привязка биометрии", "Biometric Binding") }
     var logout: String { localized("Выйти", "Log Out") }
 
     // MARK: - Rating

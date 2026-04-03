@@ -8,6 +8,7 @@ class AuthService: ObservableObject {
     @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding: Bool = false
     @AppStorage("hasSetupPIN") var hasSetupPIN: Bool = false
     @AppStorage("hasSetupBiometric") var hasSetupBiometric: Bool = false
+    @AppStorage("biometricBindingEnabled") var biometricBindingEnabled: Bool = false
     @AppStorage("currentUsername") var currentUsername: String = ""
     @AppStorage("currentDisplayName") var currentDisplayName: String = ""
     @AppStorage("currentFinderID") var currentFinderID: String = ""
@@ -21,6 +22,7 @@ class AuthService: ObservableObject {
     @Published var showDecoyAccount: Bool = false
     @Published var isBannedScreen: Bool = false
     @Published var isDeletedScreen: Bool = false
+    @Published var isBiometricLocked: Bool = false
 
     // Текущий пользователь — админ?
     var isAdmin: Bool {
@@ -50,8 +52,13 @@ class AuthService: ObservableObject {
 
             isPINLocked = hasSetupPIN
             if !isPINLocked {
-                isAuthenticated = true
-                loadCurrentUser()
+                if biometricBindingEnabled {
+                    isBiometricLocked = true
+                    isAuthenticated = false
+                } else {
+                    isAuthenticated = true
+                    loadCurrentUser()
+                }
             }
         }
     }
@@ -175,6 +182,8 @@ class AuthService: ObservableObject {
         hasSetupPIN = false
         storedPIN = ""
         decoyPIN = ""
+        biometricBindingEnabled = false
+        isBiometricLocked = false
 
         // Регистрируем новый аккаунт
         register(username: username, displayName: displayName)
@@ -211,18 +220,31 @@ class AuthService: ObservableObject {
             }
 
             isPINLocked = false
-            isAuthenticated = true
             showDecoyAccount = false
             isDecoyMode = false
-            loadCurrentUser()
+
+            if biometricBindingEnabled {
+                isBiometricLocked = true
+                isAuthenticated = false
+            } else {
+                isAuthenticated = true
+                loadCurrentUser()
+            }
             return true
         }
         return false
     }
 
+    func unlockWithBiometric() {
+        isBiometricLocked = false
+        isAuthenticated = true
+        loadCurrentUser()
+    }
+
     func logout() {
         isAuthenticated = false
         isPINLocked = true
+        isBiometricLocked = false
         currentUser = nil
     }
 
@@ -252,6 +274,7 @@ class AuthService: ObservableObject {
         hasCompletedOnboarding = false
         hasSetupPIN = false
         hasSetupBiometric = false
+        biometricBindingEnabled = false
         currentUsername = ""
         currentDisplayName = ""
         currentFinderID = ""
@@ -268,6 +291,10 @@ class AuthService: ObservableObject {
         if let bundleID = Bundle.main.bundleIdentifier {
             UserDefaults.standard.removePersistentDomain(forName: bundleID)
         }
+    }
+
+    func loadUser() {
+        loadCurrentUser()
     }
 
     private func loadCurrentUser() {

@@ -21,7 +21,10 @@ struct PrivacySettingsView: View {
     @State private var showDecoySetup = false
     @State private var decoyPin = ""
     @State private var showLockedSheet = false
+    @State private var showBiometricBindingConfirm = false
+    @State private var showBiometricDisableAuth = false
     @ObservedObject var ratingService = RatingService.shared
+    @ObservedObject var biometricService = BiometricService.shared
 
     var body: some View {
         ScrollView {
@@ -115,6 +118,11 @@ struct PrivacySettingsView: View {
                         .padding(.horizontal, 14)
                         .padding(.bottom, 8)
                     }
+                }
+
+                // Привязка биометрии
+                if biometricService.isAvailable {
+                    biometricBindingSection
                 }
 
                 // Автоудаление
@@ -267,6 +275,121 @@ struct PrivacySettingsView: View {
         .sheet(isPresented: $showLockedSheet) {
             RatingLockedInfoSheet()
                 .environmentObject(localization)
+        }
+        .alert(
+            localization.localized("Привязать биометрию?", "Bind Biometrics?"),
+            isPresented: $showBiometricBindingConfirm
+        ) {
+            Button(localization.localized("Привязать", "Bind"), role: .destructive) {
+                BiometricService.shared.authenticate { success in
+                    if success {
+                        withAnimation {
+                            authService.biometricBindingEnabled = true
+                            authService.hasSetupBiometric = true
+                        }
+                    }
+                }
+            }
+            Button(localization.cancel, role: .cancel) {}
+        } message: {
+            Text(localization.localized(
+                "После привязки вход в аккаунт будет возможен ТОЛЬКО с вашей биометрией (\(biometricService.biometricName)). Даже при правильном PIN-коде потребуется подтверждение личности. Это нельзя будет обойти.",
+                "After binding, account login will ONLY be possible with your biometrics (\(biometricService.biometricName)). Even with the correct PIN, identity verification will be required. This cannot be bypassed."
+            ))
+        }
+        .alert(
+            localization.localized("Отключить биометрию?", "Disable Biometrics?"),
+            isPresented: $showBiometricDisableAuth
+        ) {
+            Button(localization.localized("Подтвердить", "Confirm"), role: .destructive) {
+                BiometricService.shared.authenticate { success in
+                    if success {
+                        withAnimation {
+                            authService.biometricBindingEnabled = false
+                        }
+                    }
+                }
+            }
+            Button(localization.cancel, role: .cancel) {}
+        } message: {
+            Text(localization.localized(
+                "Для отключения привязки необходимо подтвердить вашу личность через \(biometricService.biometricName).",
+                "To disable binding, you need to verify your identity via \(biometricService.biometricName)."
+            ))
+        }
+    }
+
+    // MARK: - Biometric Binding Section
+    private var biometricBindingSection: some View {
+        privacySection(
+            title: localization.localized("Привязка биометрии", "Biometric Binding"),
+            icon: "hand.raised.fingers.spread.fill",
+            iconColor: .indigo
+        ) {
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.indigo.opacity(0.15))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: biometricService.biometricIcon)
+                            .font(.system(size: 14))
+                            .foregroundStyle(.indigo)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(localization.localized(
+                            "Привязать \(biometricService.biometricName)",
+                            "Bind \(biometricService.biometricName)"
+                        ))
+                        .font(.subheadline)
+
+                        Text(localization.localized(
+                            "Вход только с вашей биометрией",
+                            "Login only with your biometrics"
+                        ))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: Binding(
+                        get: { authService.biometricBindingEnabled },
+                        set: { newValue in
+                            if newValue {
+                                showBiometricBindingConfirm = true
+                            } else {
+                                showBiometricDisableAuth = true
+                            }
+                        }
+                    ))
+                    .labelsHidden()
+                    .tint(.indigo)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+
+                if authService.biometricBindingEnabled {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.shield.fill")
+                            .font(.caption)
+                        Text(localization.localized(
+                            "Аккаунт защищён биометрией. Без \(biometricService.biometricName) вход невозможен.",
+                            "Account protected by biometrics. Login without \(biometricService.biometricName) is impossible."
+                        ))
+                        .font(.caption)
+                    }
+                    .foregroundStyle(.indigo)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.indigo.opacity(0.08))
+                    .cornerRadius(10)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
         }
     }
 

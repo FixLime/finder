@@ -271,7 +271,9 @@ struct PinCodeLoginView: View {
         BiometricService.shared.authenticate { success in
             if success {
                 authService.isPINLocked = false
+                authService.isBiometricLocked = false
                 authService.isAuthenticated = true
+                authService.loadUser()
             }
         }
     }

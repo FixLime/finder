@@ -20,6 +20,9 @@ struct ContentView: View {
             } else if authService.isPINLocked && authService.hasSetupPIN {
                 PinCodeLoginView()
                     .transition(.opacity)
+            } else if authService.isBiometricLocked && authService.biometricBindingEnabled {
+                BiometricLockView()
+                    .transition(.opacity)
             } else if authService.isDecoyMode {
                 DecoyAccountView()
                     .transition(.opacity)
@@ -34,6 +37,7 @@ struct ContentView: View {
         }
         .animation(.spring(response: 0.5), value: authService.hasCompletedOnboarding)
         .animation(.spring(response: 0.5), value: authService.isPINLocked)
+        .animation(.spring(response: 0.5), value: authService.isBiometricLocked)
         .animation(.spring(response: 0.5), value: authService.isAuthenticated)
         .animation(.spring(response: 0.5), value: authService.isBannedScreen)
         .animation(.spring(response: 0.5), value: authService.isDeletedScreen)
