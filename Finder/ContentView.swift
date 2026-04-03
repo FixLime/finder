@@ -170,7 +170,11 @@ struct DeletedAccountView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var localization: LocalizationManager
     @State private var restoreCode = ""
+    @State private var finderIDCode = ""
     @State private var showRestore = false
+    @State private var showFinderIDRestore = false
+    @State private var shakeFinderID: CGFloat = 0
+    @State private var restoreSuccess = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -195,8 +199,8 @@ struct DeletedAccountView: View {
                     .foregroundStyle(.secondary)
 
                 Text(localization.localized(
-                    "Ваш аккаунт был удалён.\nВсе данные стёрты.",
-                    "Your account has been deleted.\nAll data has been erased."
+                    "Ваш аккаунт был удалён.\nВы можете восстановить его по Finder ID.",
+                    "Your account has been deleted.\nYou can restore it using your Finder ID."
                 ))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -207,42 +211,97 @@ struct DeletedAccountView: View {
 
             Spacer()
 
-            if showRestore {
-                VStack(spacing: 12) {
-                    TextField(localization.localized("Код восстановления", "Restore code"), text: $restoreCode)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .multilineTextAlignment(.center)
-                        .font(.system(size: 18, design: .monospaced))
-                        .padding(14)
-                        .liquidGlassCard(cornerRadius: 12)
-                        .padding(.horizontal, 40)
-
-                    Button {
-                        if AdminService.shared.tryRestoreCode(restoreCode) {
-                            authService.switchAccount(username: "awfulc", displayName: "awfulc")
-                        }
-                    } label: {
-                        Text(localization.localized("Восстановить", "Restore"))
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(Capsule().fill(restoreCode.isEmpty ? Color.gray : Color.blue))
-                    }
-                    .disabled(restoreCode.isEmpty)
-                    .padding(.horizontal, 40)
-                }
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-
+            // Restore via Finder ID
             VStack(spacing: 12) {
                 Button {
-                    withAnimation { showRestore.toggle() }
+                    withAnimation { showFinderIDRestore.toggle(); showRestore = false }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "person.badge.key.fill")
+                            .foregroundStyle(.cyan)
+                        Text(localization.localized("Восстановить по Finder ID", "Restore via Finder ID"))
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.blue)
+                    }
+                }
+
+                if showFinderIDRestore {
+                    VStack(spacing: 12) {
+                        TextField("FID-XXXXXXXX", text: $finderIDCode)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .multilineTextAlignment(.center)
+                            .font(.system(size: 18, design: .monospaced))
+                            .padding(14)
+                            .liquidGlassCard(cornerRadius: 12)
+                            .padding(.horizontal, 40)
+                            .offset(x: shakeFinderID)
+
+                        Button {
+                            if authService.restoreAccount(finderID: finderIDCode) {
+                                restoreSuccess = true
+                            } else {
+                                withAnimation(.default) { shakeFinderID = 10 }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    withAnimation(.default) { shakeFinderID = -10 }
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    withAnimation(.default) { shakeFinderID = 0 }
+                                }
+                                HapticService.error()
+                            }
+                        } label: {
+                            Text(localization.localized("Восстановить", "Restore"))
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Capsule().fill(finderIDCode.isEmpty ? Color.gray : Color.cyan))
+                        }
+                        .disabled(finderIDCode.isEmpty)
+                        .padding(.horizontal, 40)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+            }
+
+            // Admin restore code
+            VStack(spacing: 12) {
+                Button {
+                    withAnimation { showRestore.toggle(); showFinderIDRestore = false }
                 } label: {
                     Text(localization.localized("Есть код восстановления", "Have a restore code"))
                         .font(.subheadline)
                         .foregroundStyle(.blue)
+                }
+
+                if showRestore {
+                    VStack(spacing: 12) {
+                        TextField(localization.localized("Код восстановления", "Restore code"), text: $restoreCode)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .multilineTextAlignment(.center)
+                            .font(.system(size: 18, design: .monospaced))
+                            .padding(14)
+                            .liquidGlassCard(cornerRadius: 12)
+                            .padding(.horizontal, 40)
+
+                        Button {
+                            if AdminService.shared.tryRestoreCode(restoreCode) {
+                                authService.switchAccount(username: "awfulc", displayName: "awfulc")
+                            }
+                        } label: {
+                            Text(localization.localized("Восстановить", "Restore"))
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Capsule().fill(restoreCode.isEmpty ? Color.gray : Color.blue))
+                        }
+                        .disabled(restoreCode.isEmpty)
+                        .padding(.horizontal, 40)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
                 Button {

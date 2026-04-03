@@ -270,6 +270,42 @@ class AuthService: ObservableObject {
         currentUser = nil
     }
 
+    // Мягкое удаление — аккаунт деактивируется, но данные сохраняются
+    func softDeleteAccount() {
+        let savedFinderID = currentFinderID
+        let savedUsername = currentUsername
+
+        // Сохраняем Finder ID для восстановления
+        var deletedAccounts = UserDefaults.standard.dictionary(forKey: "deletedAccounts") as? [String: String] ?? [:]
+        deletedAccounts[savedFinderID] = savedUsername
+        UserDefaults.standard.set(deletedAccounts, forKey: "deletedAccounts")
+
+        // Деактивируем
+        isAuthenticated = false
+        isPINLocked = false
+        isDeletedScreen = true
+        currentUser = nil
+    }
+
+    // Восстановление аккаунта по Finder ID
+    func restoreAccount(finderID: String) -> Bool {
+        let deletedAccounts = UserDefaults.standard.dictionary(forKey: "deletedAccounts") as? [String: String] ?? [:]
+
+        if let username = deletedAccounts[finderID], finderID == currentFinderID {
+            isDeletedScreen = false
+            isAuthenticated = true
+            isPINLocked = false
+            loadCurrentUser()
+
+            // Убираем из удалённых
+            var updated = deletedAccounts
+            updated.removeValue(forKey: finderID)
+            UserDefaults.standard.set(updated, forKey: "deletedAccounts")
+            return true
+        }
+        return false
+    }
+
     // Принудительный выход при бане
     func forceLogoutBanned() {
         isAuthenticated = false

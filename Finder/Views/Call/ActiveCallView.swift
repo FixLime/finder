@@ -37,7 +37,6 @@ struct RTCVideoView: UIViewRepresentable {
 }
 
 // MARK: - Active Call View
-
 struct ActiveCallView: View {
     @ObservedObject var callManager = CallManager.shared
     @ObservedObject var webRTC = WebRTCService.shared
@@ -45,138 +44,117 @@ struct ActiveCallView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var showControls = true
+    @State private var wavePhase: CGFloat = 0
+    @State private var appear = false
 
     var body: some View {
         ZStack {
             // Background
             if callManager.activeCall?.isVideo == true {
-                // Remote video (full screen)
-                if let remoteTrack = webRTC.remoteVideoTrack {
-                    RTCVideoView(track: remoteTrack)
-                        .ignoresSafeArea()
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                showControls.toggle()
-                            }
-                        }
-                } else {
-                    Color.black.ignoresSafeArea()
-                    VStack {
-                        Spacer()
-                        ProgressView()
-                            .tint(.white)
-                        Text(localization.localized("Подключение видео...", "Connecting video..."))
-                            .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.6))
-                            .padding(.top, 8)
-                        Spacer()
-                    }
-                }
-
-                // Local video (PiP)
-                if let localTrack = webRTC.localVideoTrack {
-                    VStack {
-                        HStack {
-                            Spacer()
-                            RTCVideoView(track: localTrack)
-                                .frame(width: 120, height: 160)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                )
-                                .shadow(radius: 5)
-                                .padding(.trailing, 16)
-                                .padding(.top, 60)
-                                .onTapGesture {
-                                    callManager.switchCamera()
-                                }
-                        }
-                        Spacer()
-                    }
-                }
+                videoBackground
             } else {
-                // Audio call background
-                LinearGradient(
-                    colors: [.blue.opacity(0.8), .purple.opacity(0.6), .black],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                audioBackground
             }
 
             // Controls overlay
             if showControls || callManager.activeCall?.isVideo != true {
                 VStack(spacing: 0) {
+                    // Top bar — encryption badge
+                    HStack {
+                        HStack(spacing: 6) {
+                            Image(systemName: "lock.shield.fill")
+                                .font(.system(size: 11))
+                            Text(localization.localized("Зашифрован", "Encrypted"))
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundStyle(.white.opacity(0.6))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(.white.opacity(0.1)))
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 60)
+
                     Spacer()
 
                     if let call = callManager.activeCall {
+                        // Avatar (audio only or video connecting)
                         if !call.isVideo || webRTC.remoteVideoTrack == nil {
-                            AvatarView(user: call.user, size: 100)
-                                .padding(.bottom, 16)
+                            ZStack {
+                                // Animated rings
+                                ForEach(0..<3, id: \.self) { i in
+                                    Circle()
+                                        .stroke(.white.opacity(0.1), lineWidth: 1.5)
+                                        .frame(
+                                            width: CGFloat(130 + i * 25),
+                                            height: CGFloat(130 + i * 25)
+                                        )
+                                        .scaleEffect(callManager.callState == .connected ? 1.0 :
+                                            (wavePhase > 0 ? 1.1 : 0.95))
+                                        .opacity(callManager.callState == .connected ? 0.3 : 0.6)
+                                        .animation(
+                                            .easeInOut(duration: 1.5)
+                                            .repeatForever(autoreverses: true)
+                                            .delay(Double(i) * 0.3),
+                                            value: wavePhase
+                                        )
+                                }
+
+                                AvatarView(user: call.user, size: 110)
+                                    .shadow(color: .black.opacity(0.3), radius: 15)
+                            }
+                            .padding(.bottom, 20)
                         }
 
-                        Text(call.user.displayName)
-                            .font(.title.bold())
-                            .foregroundStyle(.white)
-                            .shadow(radius: 3)
+                        // Name
+                        HStack(spacing: 6) {
+                            Text(call.user.displayName)
+                                .font(.system(size: 28, weight: .bold))
+                                .foregroundStyle(.white)
+                                .shadow(color: .black.opacity(0.3), radius: 3)
 
-                        Text(statusText)
-                            .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.7))
-                            .padding(.top, 4)
+                            if call.user.isVerified {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(.blue)
+                            }
+                        }
 
+                        // Status
+                        HStack(spacing: 6) {
+                            if callManager.callState == .calling || callManager.callState == .ringing {
+                                ProgressView()
+                                    .tint(.white.opacity(0.7))
+                                    .scaleEffect(0.7)
+                            }
+                            Text(statusText)
+                                .font(.subheadline)
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
+                        .padding(.top, 4)
+
+                        // Duration
                         if callManager.callState == .connected {
                             Text(callManager.formattedDuration)
-                                .font(.system(size: 17, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.8))
-                                .padding(.top, 8)
+                                .font(.system(size: 18, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.9))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 6)
+                                .background(Capsule().fill(.white.opacity(0.1)))
+                                .padding(.top, 10)
                         }
                     }
 
                     Spacer()
                     Spacer()
 
-                    // Controls
-                    HStack(spacing: 32) {
-                        CallButton(
-                            icon: callManager.isMuted ? "mic.slash.fill" : "mic.fill",
-                            label: callManager.isMuted
-                                ? localization.localized("Вкл.", "Unmute")
-                                : localization.localized("Микрофон", "Mic"),
-                            isActive: callManager.isMuted
-                        ) {
-                            callManager.toggleMute()
-                        }
+                    // Control buttons
+                    controlButtons
+                        .padding(.bottom, 30)
 
-                        if callManager.activeCall?.isVideo == true {
-                            CallButton(
-                                icon: callManager.isCameraOn ? "video.fill" : "video.slash.fill",
-                                label: localization.localized("Камера", "Camera"),
-                                isActive: !callManager.isCameraOn
-                            ) {
-                                callManager.toggleCamera()
-                            }
-
-                            CallButton(
-                                icon: "arrow.triangle.2.circlepath.camera",
-                                label: localization.localized("Флип", "Flip"),
-                                isActive: false
-                            ) {
-                                callManager.switchCamera()
-                            }
-                        } else {
-                            CallButton(
-                                icon: callManager.isSpeakerOn ? "speaker.wave.3.fill" : "speaker.fill",
-                                label: localization.localized("Динамик", "Speaker"),
-                                isActive: callManager.isSpeakerOn
-                            ) {
-                                callManager.toggleSpeaker()
-                            }
-                        }
-                    }
-                    .padding(.bottom, 40)
-
+                    // End call
                     Button {
                         callManager.endCall()
                         dismiss()
@@ -184,13 +162,153 @@ struct ActiveCallView: View {
                         ZStack {
                             Circle()
                                 .fill(Color.red)
-                                .frame(width: 70, height: 70)
+                                .frame(width: 72, height: 72)
+                                .shadow(color: .red.opacity(0.4), radius: 10, y: 5)
+
                             Image(systemName: "phone.down.fill")
                                 .font(.system(size: 28))
                                 .foregroundStyle(.white)
                         }
                     }
                     .padding(.bottom, 50)
+                }
+                .opacity(appear ? 1 : 0)
+            }
+        }
+        .onAppear {
+            wavePhase = 1
+            withAnimation(.easeOut(duration: 0.5)) {
+                appear = true
+            }
+        }
+    }
+
+    // MARK: - Video Background
+    private var videoBackground: some View {
+        ZStack {
+            if let remoteTrack = webRTC.remoteVideoTrack {
+                RTCVideoView(track: remoteTrack)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showControls.toggle()
+                        }
+                    }
+            } else {
+                Color.black.ignoresSafeArea()
+                VStack {
+                    Spacer()
+                    ProgressView()
+                        .tint(.white)
+                    Text(localization.localized("Подключение видео...", "Connecting video..."))
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.6))
+                        .padding(.top, 8)
+                    Spacer()
+                }
+            }
+
+            // Local video PiP
+            if let localTrack = webRTC.localVideoTrack {
+                VStack {
+                    HStack {
+                        Spacer()
+                        RTCVideoView(track: localTrack)
+                            .frame(width: 120, height: 170)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(.white.opacity(0.2), lineWidth: 1)
+                            )
+                            .shadow(color: .black.opacity(0.5), radius: 10)
+                            .padding(.trailing, 16)
+                            .padding(.top, 60)
+                            .onTapGesture {
+                                callManager.switchCamera()
+                            }
+                    }
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    // MARK: - Audio Background
+    private var audioBackground: some View {
+        ZStack {
+            // Mesh gradient-like background
+            LinearGradient(
+                colors: [
+                    Color(red: 0.1, green: 0.1, blue: 0.3),
+                    Color(red: 0.15, green: 0.05, blue: 0.25),
+                    Color(red: 0.05, green: 0.05, blue: 0.15)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            // Animated blurred circles
+            Circle()
+                .fill(Color.blue.opacity(0.15))
+                .frame(width: 300, height: 300)
+                .blur(radius: 80)
+                .offset(x: -50, y: -200)
+
+            Circle()
+                .fill(Color.purple.opacity(0.15))
+                .frame(width: 250, height: 250)
+                .blur(radius: 60)
+                .offset(x: 100, y: 200)
+
+            Circle()
+                .fill(Color.cyan.opacity(0.1))
+                .frame(width: 200, height: 200)
+                .blur(radius: 70)
+                .offset(x: -80, y: 100)
+        }
+    }
+
+    // MARK: - Control Buttons
+    private var controlButtons: some View {
+        HStack(spacing: 24) {
+            // Mute
+            CallControlButton(
+                icon: callManager.isMuted ? "mic.slash.fill" : "mic.fill",
+                label: callManager.isMuted
+                    ? localization.localized("Вкл.", "Unmute")
+                    : localization.localized("Микрофон", "Mic"),
+                isActive: callManager.isMuted
+            ) {
+                callManager.toggleMute()
+            }
+
+            if callManager.activeCall?.isVideo == true {
+                // Camera toggle
+                CallControlButton(
+                    icon: callManager.isCameraOn ? "video.fill" : "video.slash.fill",
+                    label: localization.localized("Камера", "Camera"),
+                    isActive: !callManager.isCameraOn
+                ) {
+                    callManager.toggleCamera()
+                }
+
+                // Flip camera
+                CallControlButton(
+                    icon: "arrow.triangle.2.circlepath.camera",
+                    label: localization.localized("Флип", "Flip"),
+                    isActive: false
+                ) {
+                    callManager.switchCamera()
+                }
+            } else {
+                // Speaker
+                CallControlButton(
+                    icon: callManager.isSpeakerOn ? "speaker.wave.3.fill" : "speaker.fill",
+                    label: localization.localized("Динамик", "Speaker"),
+                    isActive: callManager.isSpeakerOn
+                ) {
+                    callManager.toggleSpeaker()
                 }
             }
         }
@@ -214,27 +332,37 @@ struct ActiveCallView: View {
     }
 }
 
-// MARK: - Call Button
-struct CallButton: View {
+// MARK: - Call Control Button
+struct CallControlButton: View {
     let icon: String
     let label: String
     var isActive: Bool = false
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button(action: {
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred()
+            action()
+        }) {
             VStack(spacing: 8) {
                 ZStack {
                     Circle()
-                        .fill(isActive ? .white : .white.opacity(0.2))
-                        .frame(width: 56, height: 56)
+                        .fill(isActive ? .white : .white.opacity(0.15))
+                        .frame(width: 60, height: 60)
+                        .overlay(
+                            Circle()
+                                .stroke(.white.opacity(0.2), lineWidth: 1)
+                        )
+
                     Image(systemName: icon)
                         .font(.system(size: 22))
                         .foregroundStyle(isActive ? .black : .white)
                 }
+
                 Text(label)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.8))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.7))
             }
         }
     }
@@ -247,96 +375,185 @@ struct IncomingCallView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var pulseScale: CGFloat = 1.0
+    @State private var ringPhase: CGFloat = 0
+    @State private var appear = false
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [.green.opacity(0.7), .blue.opacity(0.6), .black],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            // Background
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.05, green: 0.15, blue: 0.1),
+                        Color(red: 0.1, green: 0.1, blue: 0.2),
+                        Color(red: 0.05, green: 0.05, blue: 0.1)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+
+                Circle()
+                    .fill(Color.green.opacity(0.1))
+                    .frame(width: 400, height: 400)
+                    .blur(radius: 100)
+                    .offset(y: -100)
+                    .scaleEffect(pulseScale * 0.8)
+            }
 
             VStack(spacing: 0) {
+                // Top bar
+                HStack {
+                    HStack(spacing: 6) {
+                        Image(systemName: "lock.shield.fill")
+                            .font(.system(size: 11))
+                        Text(localization.localized("Зашифрованный звонок", "Encrypted call"))
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundStyle(.white.opacity(0.5))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(.white.opacity(0.08)))
+
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 60)
+                .opacity(appear ? 1 : 0)
+
                 Spacer()
 
                 if let incoming = callManager.incomingCall {
+                    // Animated avatar
                     ZStack {
+                        // Ring waves
+                        ForEach(0..<4, id: \.self) { i in
+                            Circle()
+                                .stroke(.white.opacity(0.05), lineWidth: 1.5)
+                                .frame(
+                                    width: CGFloat(140 + i * 30),
+                                    height: CGFloat(140 + i * 30)
+                                )
+                                .scaleEffect(pulseScale)
+                                .opacity(2.0 - pulseScale)
+                                .animation(
+                                    .easeInOut(duration: 1.5)
+                                    .repeatForever(autoreverses: true)
+                                    .delay(Double(i) * 0.2),
+                                    value: pulseScale
+                                )
+                        }
+
+                        // Glow ring
                         Circle()
-                            .fill(.white.opacity(0.1))
-                            .frame(width: 140, height: 140)
-                            .scaleEffect(pulseScale)
+                            .stroke(
+                                AngularGradient(
+                                    gradient: Gradient(colors: [.green.opacity(0.5), .cyan.opacity(0.3), .green.opacity(0.5)]),
+                                    center: .center
+                                ),
+                                lineWidth: 3
+                            )
+                            .frame(width: 130, height: 130)
+                            .rotationEffect(.degrees(ringPhase))
 
                         Circle()
-                            .fill(.white.opacity(0.15))
+                            .fill(.white.opacity(0.1))
                             .frame(width: 120, height: 120)
 
                         Image(systemName: "person.fill")
-                            .font(.system(size: 40))
+                            .font(.system(size: 46))
                             .foregroundStyle(.white)
                     }
-                    .padding(.bottom, 24)
-                    .onAppear {
-                        withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                            pulseScale = 1.3
-                        }
+                    .padding(.bottom, 28)
+                    .scaleEffect(appear ? 1 : 0.7)
+                    .opacity(appear ? 1 : 0)
+
+                    // Name
+                    HStack(spacing: 6) {
+                        Text(incoming.callerName)
+                            .font(.system(size: 30, weight: .bold))
+                            .foregroundStyle(.white)
+                            .shadow(color: .black.opacity(0.3), radius: 3)
                     }
+                    .opacity(appear ? 1 : 0)
 
-                    Text(incoming.callerName)
-                        .font(.title.bold())
-                        .foregroundStyle(.white)
-
-                    Text(incoming.isVideo
-                         ? localization.localized("Видеозвонок", "Video Call")
-                         : localization.localized("Аудиозвонок", "Voice Call"))
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.7))
-                    .padding(.top, 4)
+                    // Call type
+                    HStack(spacing: 6) {
+                        Image(systemName: incoming.isVideo ? "video.fill" : "phone.fill")
+                            .font(.system(size: 13))
+                        Text(incoming.isVideo
+                             ? localization.localized("Входящий видеозвонок", "Incoming Video Call")
+                             : localization.localized("Входящий аудиозвонок", "Incoming Voice Call"))
+                        .font(.subheadline)
+                    }
+                    .foregroundStyle(.white.opacity(0.6))
+                    .padding(.top, 6)
+                    .opacity(appear ? 1 : 0)
                 }
 
                 Spacer()
                 Spacer()
 
-                HStack(spacing: 60) {
+                // Answer/Decline buttons
+                HStack(spacing: 70) {
+                    // Decline
                     Button {
                         callManager.declineCall()
                         dismiss()
                     } label: {
-                        VStack(spacing: 8) {
+                        VStack(spacing: 10) {
                             ZStack {
                                 Circle()
                                     .fill(Color.red)
-                                    .frame(width: 70, height: 70)
+                                    .frame(width: 72, height: 72)
+                                    .shadow(color: .red.opacity(0.4), radius: 10, y: 5)
+
                                 Image(systemName: "phone.down.fill")
                                     .font(.system(size: 28))
                                     .foregroundStyle(.white)
                             }
                             Text(localization.localized("Отклонить", "Decline"))
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.8))
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.7))
                         }
                     }
 
+                    // Accept
                     Button {
                         callManager.answerCall()
                     } label: {
-                        VStack(spacing: 8) {
+                        VStack(spacing: 10) {
                             ZStack {
                                 Circle()
                                     .fill(Color.green)
-                                    .frame(width: 70, height: 70)
+                                    .frame(width: 72, height: 72)
+                                    .shadow(color: .green.opacity(0.4), radius: 10, y: 5)
+
                                 Image(systemName: "phone.fill")
                                     .font(.system(size: 28))
                                     .foregroundStyle(.white)
                                     .rotationEffect(.degrees(-135))
                             }
                             Text(localization.localized("Принять", "Accept"))
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.8))
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.7))
                         }
                     }
                 }
+                .opacity(appear ? 1 : 0)
+                .offset(y: appear ? 0 : 30)
                 .padding(.bottom, 60)
+            }
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                pulseScale = 1.25
+            }
+            withAnimation(.linear(duration: 4).repeatForever(autoreverses: false)) {
+                ringPhase = 360
+            }
+            withAnimation(.spring(response: 0.6).delay(0.1)) {
+                appear = true
             }
         }
     }
