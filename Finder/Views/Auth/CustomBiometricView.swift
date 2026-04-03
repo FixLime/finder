@@ -162,7 +162,7 @@ class FaceCameraController: NSObject, ObservableObject, AVCaptureVideoDataOutput
         }
 
         if let connection = videoOutput.connection(with: .video) {
-            connection.videoOrientation = .portrait
+            connection.videoRotationAngle = 90
             connection.isVideoMirrored = true
         }
     }
@@ -523,7 +523,7 @@ struct CustomBiometricSetupView: View {
             scanProgress = CGFloat(capturedFaces.count) / CGFloat(requiredCaptures)
         }
 
-        HapticService.light()
+        HapticService.lightTap()
 
         if capturedFaces.count >= requiredCaptures {
             // Store the average faceprint from all captures
