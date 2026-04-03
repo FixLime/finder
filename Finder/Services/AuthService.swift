@@ -291,7 +291,7 @@ class AuthService: ObservableObject {
     func restoreAccount(finderID: String) -> Bool {
         let deletedAccounts = UserDefaults.standard.dictionary(forKey: "deletedAccounts") as? [String: String] ?? [:]
 
-        if let username = deletedAccounts[finderID], finderID == currentFinderID {
+        if let _ = deletedAccounts[finderID], finderID == currentFinderID {
             isDeletedScreen = false
             isAuthenticated = true
             isPINLocked = false
