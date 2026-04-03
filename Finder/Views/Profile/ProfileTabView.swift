@@ -8,11 +8,6 @@ struct ProfileTabView: View {
     @ObservedObject var ratingService = RatingService.shared
 
 
-    @State private var showFenix = false
-    @State private var showLogoutAlert = false
-    @State private var showSwitchAccount = false
-    @State private var switchUsername = ""
-    @State private var switchDisplayName = ""
     @State private var appear = false
 
     var body: some View {
@@ -167,49 +162,28 @@ struct ProfileTabView: View {
                         .animation(.spring(response: 0.4).delay(0.17), value: appear)
                     }
 
-                    // Switch Account
-                    Button { showSwitchAccount = true } label: {
+                    // Account Settings
+                    NavigationLink {
+                        AccountSettingsView()
+                            .environmentObject(authService)
+                            .environmentObject(localization)
+                            .environmentObject(themeManager)
+                            .environmentObject(chatService)
+                    } label: {
                         HStack(spacing: 12) {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 8)
                                     .fill(Color.orange.opacity(0.15))
                                     .frame(width: 32, height: 32)
-                                Image(systemName: "person.2.fill")
+                                Image(systemName: "person.circle.fill")
                                     .font(.system(size: 14))
                                     .foregroundStyle(.orange)
                             }
-                            Text(localization.switchAccount)
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(14)
-                    }
-                    .liquidGlassCard(cornerRadius: 16)
-                    .padding(.horizontal)
-                    .opacity(appear ? 1 : 0)
-                    .offset(y: appear ? 0 : 20)
-                    .animation(.spring(response: 0.4).delay(0.18), value: appear)
-
-                    // Fenix
-                    Button { showFenix = true } label: {
-                        HStack(spacing: 12) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.red.opacity(0.15))
-                                    .frame(width: 32, height: 32)
-                                Image(systemName: "flame.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.red)
-                            }
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(localization.fenixProtocol)
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(.red)
-                                Text(localization.localized("Удалить все данные", "Delete all data"))
+                                Text(localization.localized("Аккаунт", "Account"))
+                                    .font(.subheadline)
+                                    .foregroundStyle(.primary)
+                                Text(localization.localized("Управление, удаление, выход", "Management, deletion, logout"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -224,21 +198,7 @@ struct ProfileTabView: View {
                     .padding(.horizontal)
                     .opacity(appear ? 1 : 0)
                     .offset(y: appear ? 0 : 20)
-                    .animation(.spring(response: 0.4).delay(0.2), value: appear)
-
-                    // Logout
-                    Button { showLogoutAlert = true } label: {
-                        HStack {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                            Text(localization.logout)
-                        }
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .liquidGlassCard(cornerRadius: 16)
-                    }
-                    .padding(.horizontal)
-                    .opacity(appear ? 1 : 0)
+                    .animation(.spring(response: 0.4).delay(0.18), value: appear)
 
                     Text("Finder v1.0.0")
                         .font(.caption)
@@ -249,20 +209,6 @@ struct ProfileTabView: View {
                 }
             }
             .navigationTitle(localization.profile)
-            .fullScreenCover(isPresented: $showFenix) {
-                FenixProtocolView()
-                    .environmentObject(authService)
-                    .environmentObject(chatService)
-                    .environmentObject(themeManager)
-                    .environmentObject(localization)
-            }
-            .alert(localization.localized("Выйти из аккаунта?", "Log out?"), isPresented: $showLogoutAlert) {
-                Button(localization.cancel, role: .cancel) {}
-                Button(localization.logout, role: .destructive) { authService.logout() }
-            }
-            .sheet(isPresented: $showSwitchAccount) {
-                switchAccountSheet
-            }
         }
         .onAppear {
             withAnimation { appear = true }
@@ -327,86 +273,4 @@ struct ProfileTabView: View {
         .padding(.horizontal)
     }
 
-    // MARK: - Switch Account Sheet
-    private var switchAccountSheet: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                Spacer()
-
-                ZStack {
-                    Circle()
-                        .fill(Color.orange.opacity(0.15))
-                        .frame(width: 80, height: 80)
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.orange)
-                }
-
-                Text(localization.switchAccount)
-                    .font(.title2.bold())
-
-                Text(localization.localized(
-                    "Введите юзернейм для входа в другой аккаунт",
-                    "Enter username to switch to another account"
-                ))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-
-                VStack(spacing: 12) {
-                    HStack {
-                        Image(systemName: "at")
-                            .foregroundStyle(.secondary)
-                        TextField(localization.username, text: $switchUsername)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    }
-                    .padding(14)
-                    .liquidGlassCard(cornerRadius: 12)
-
-                    HStack {
-                        Image(systemName: "person.fill")
-                            .foregroundStyle(.secondary)
-                        TextField(localization.localized("Имя", "Display Name"), text: $switchDisplayName)
-                    }
-                    .padding(14)
-                    .liquidGlassCard(cornerRadius: 12)
-                }
-                .padding(.horizontal)
-
-                Button {
-                    guard !switchUsername.isEmpty else { return }
-                    let name = switchDisplayName.isEmpty ? switchUsername : switchDisplayName
-                    authService.switchAccount(username: switchUsername, displayName: name)
-                    chatService.loadDemoData()
-                    showSwitchAccount = false
-                    switchUsername = ""
-                    switchDisplayName = ""
-                } label: {
-                    Text(localization.localized("Войти", "Sign In"))
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(switchUsername.isEmpty ? Color.gray : Color.blue)
-                        )
-                }
-                .disabled(switchUsername.isEmpty)
-                .padding(.horizontal)
-
-                Spacer()
-                Spacer()
-            }
-            .navigationTitle(localization.switchAccount)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(localization.cancel) { showSwitchAccount = false }
-                }
-            }
-        }
-    }
 }

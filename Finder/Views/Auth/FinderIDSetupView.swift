@@ -13,6 +13,9 @@ struct FinderIDSetupView: View {
     @State private var errorMessage = ""
     @State private var generatedFinderID = ""
     @State private var appear = false
+    @State private var showAdvancedOptions = false
+    @State private var showGovLogin = false
+    @State private var showRestoreAccount = false
 
     enum SetupStep {
         case username
@@ -82,6 +85,16 @@ struct FinderIDSetupView: View {
         .alert(errorMessage, isPresented: $showError) {
             Button("OK") {}
         }
+        .sheet(isPresented: $showGovLogin) {
+            GovLoginView()
+                .environmentObject(localization)
+        }
+        .sheet(isPresented: $showRestoreAccount) {
+            RestoreAccountView()
+                .environmentObject(authService)
+                .environmentObject(localization)
+                .environmentObject(chatService)
+        }
         .onAppear {
             withAnimation(.spring(response: 0.5).delay(0.2)) {
                 appear = true
@@ -139,6 +152,88 @@ struct FinderIDSetupView: View {
             .padding(.horizontal, 32)
             .opacity(username.count >= 3 ? 1 : 0.5)
             .disabled(username.count < 3)
+
+            // Advanced options
+            Button {
+                withAnimation(.spring(response: 0.3)) {
+                    showAdvancedOptions.toggle()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 14))
+                    Text(localization.localized("Дополнительные параметры", "Advanced Options"))
+                        .font(.subheadline)
+                }
+                .foregroundStyle(.secondary)
+            }
+            .padding(.top, 8)
+
+            if showAdvancedOptions {
+                VStack(spacing: 10) {
+                    // Gov login
+                    Button {
+                        showGovLogin = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.indigo.opacity(0.15))
+                                    .frame(width: 32, height: 32)
+                                Image(systemName: "building.columns.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.indigo)
+                            }
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(localization.localized("Войти как госслужащий", "Sign in as Gov. Employee"))
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.primary)
+                                Text(localization.localized("По удостоверению", "With credentials"))
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(12)
+                        .liquidGlassCard(cornerRadius: 12)
+                    }
+
+                    // Restore account
+                    Button {
+                        showRestoreAccount = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.cyan.opacity(0.15))
+                                    .frame(width: 32, height: 32)
+                                Image(systemName: "arrow.counterclockwise.circle.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.cyan)
+                            }
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(localization.localized("Восстановить аккаунт", "Restore Account"))
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.primary)
+                                Text(localization.localized("По Finder ID", "Via Finder ID"))
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(12)
+                        .liquidGlassCard(cornerRadius: 12)
+                    }
+                }
+                .padding(.horizontal, 32)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
     }
 

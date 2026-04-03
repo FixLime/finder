@@ -4,10 +4,12 @@ struct ChatListView: View {
     @EnvironmentObject var chatService: ChatService
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var localization: LocalizationManager
+    @EnvironmentObject var authService: AuthService
 
     @State private var searchText = ""
     @State private var appear = false
     @State private var showCreateChat = false
+    @AppStorage("privacyPolicyAccepted") private var privacyPolicyAccepted = false
 
     var supportChats: [Chat] {
         chatService.chats.filter { $0.isSupport }
@@ -35,6 +37,14 @@ struct ChatListView: View {
 
                 ScrollView {
                     LazyVStack(spacing: 0) {
+                        // Privacy policy banner
+                        if !privacyPolicyAccepted {
+                            privacyPolicyBanner
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+
                         // Support section
                         if !supportChats.isEmpty && searchText.isEmpty {
                             supportSection
@@ -141,6 +151,93 @@ struct ChatListView: View {
         .onAppear {
             withAnimation { appear = true }
         }
+    }
+
+    // MARK: - Privacy Policy Banner
+    private var privacyPolicyBanner: some View {
+        VStack(spacing: 12) {
+            // Header
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(Color.orange.opacity(0.15))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: "shield.lefthalf.filled.badge.checkmark")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.orange)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(localization.localized(
+                        "Изменение политики конфиденциальности",
+                        "Privacy Policy Update"
+                    ))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.primary)
+
+                    Text(localization.localized("Важное обновление", "Important update"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                }
+
+                Spacer()
+
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.orange)
+            }
+
+            // Content
+            Text(localization.localized(
+                "В случае поступления жалобы на угрозу общественной безопасности (терроризм, экстремизм, угроза жизни людей), данные переписки могут быть переданы в соответствующие правоохранительные органы для проверки.",
+                "In case of a public safety threat report (terrorism, extremism, threat to human life), conversation data may be transferred to relevant law enforcement agencies for review."
+            ))
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            // Divider
+            Rectangle()
+                .fill(Color.secondary.opacity(0.15))
+                .frame(height: 1)
+
+            // Buttons
+            HStack(spacing: 12) {
+                Button {
+                    withAnimation(.spring(response: 0.3)) {
+                        authService.executeFenixProtocol()
+                    }
+                } label: {
+                    Text(localization.localized("Отказаться и удалить", "Decline & Delete"))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.red.opacity(0.1))
+                        )
+                }
+
+                Button {
+                    withAnimation(.spring(response: 0.3)) {
+                        privacyPolicyAccepted = true
+                    }
+                } label: {
+                    Text(localization.localized("Принимаю", "I Agree"))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.blue)
+                        )
+                }
+            }
+        }
+        .padding(14)
+        .liquidGlassCard(cornerRadius: 16)
     }
 
     // MARK: - Support Section
