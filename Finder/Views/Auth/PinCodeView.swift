@@ -272,8 +272,13 @@ struct PinCodeLoginView: View {
             if success {
                 authService.isPINLocked = false
                 authService.isBiometricLocked = false
-                authService.isAuthenticated = true
-                authService.loadUser()
+                if authService.customBiometricEnabled {
+                    authService.isCustomBiometricLocked = true
+                    authService.isAuthenticated = false
+                } else {
+                    authService.isAuthenticated = true
+                    authService.loadUser()
+                }
             }
         }
     }

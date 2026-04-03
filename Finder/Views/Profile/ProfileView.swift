@@ -7,6 +7,7 @@ struct UserProfileView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var appear = false
+    @State private var showReport = false
 
     var body: some View {
         NavigationStack {
@@ -118,6 +119,28 @@ struct UserProfileView: View {
                     .liquidGlassCard(cornerRadius: 16)
                     .padding(.horizontal)
 
+                    // Report button
+                    Button {
+                        showReport = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 14))
+                            Text(localization.localized("Пожаловаться", "Report"))
+                                .font(.subheadline)
+                        }
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity)
+                        .liquidGlassCard(cornerRadius: 14)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.red.opacity(0.2), lineWidth: 1)
+                        )
+                    }
+                    .padding(.horizontal)
+
                     Spacer(minLength: 50)
                 }
             }
@@ -127,6 +150,9 @@ struct UserProfileView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(localization.done) { dismiss() }
                 }
+            }
+            .sheet(isPresented: $showReport) {
+                ReportUserView(reportedUser: user)
             }
         }
         .onAppear {

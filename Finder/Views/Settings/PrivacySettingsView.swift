@@ -23,6 +23,7 @@ struct PrivacySettingsView: View {
     @State private var showLockedSheet = false
     @State private var showBiometricBindingConfirm = false
     @State private var showBiometricDisableAuth = false
+    @State private var showCustomBiometricSetup = false
     @ObservedObject var ratingService = RatingService.shared
     @ObservedObject var biometricService = BiometricService.shared
 
@@ -122,6 +123,9 @@ struct PrivacySettingsView: View {
 
                 // Привязка биометрии
                 biometricBindingSection
+
+                // Кастомная биометрия (сканирование лица)
+                customBiometricSection
 
                 // Автоудаление
                 privacySection(
@@ -270,6 +274,9 @@ struct PrivacySettingsView: View {
         .sheet(isPresented: $showDecoySetup) {
             decoyPinSetup
         }
+        .sheet(isPresented: $showCustomBiometricSetup) {
+            CustomBiometricSetupView()
+        }
         .sheet(isPresented: $showLockedSheet) {
             RatingLockedInfoSheet()
                 .environmentObject(localization)
@@ -412,6 +419,106 @@ struct PrivacySettingsView: View {
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.indigo.opacity(0.08))
+                    .cornerRadius(10)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+        }
+    }
+
+    // MARK: - Custom Biometric Section
+    private var customBiometricSection: some View {
+        privacySection(
+            title: localization.localized("Сканирование лица", "Face Scanning"),
+            icon: "person.viewfinder",
+            iconColor: .purple
+        ) {
+            VStack(spacing: 0) {
+                Button {
+                    if authService.customBiometricEnabled {
+                        // Disable
+                        withAnimation {
+                            authService.customBiometricEnabled = false
+                        }
+                    } else {
+                        showCustomBiometricSetup = true
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.purple.opacity(0.15))
+                                .frame(width: 32, height: 32)
+                            Image(systemName: "person.viewfinder")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.purple)
+                        }
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(localization.localized(
+                                "Биометрия по камере",
+                                "Camera Biometrics"
+                            ))
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+
+                            Text(localization.localized(
+                                "Сканирование лица отдельно от Face ID",
+                                "Face scanning separate from Face ID"
+                            ))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        if authService.customBiometricEnabled {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                }
+
+                // Warning about camera quality
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                    Text(localization.localized(
+                        "Не рекомендуется, если камера на другом устройстве заметно ниже качеством",
+                        "Not recommended if the other device's camera is significantly lower quality"
+                    ))
+                    .font(.caption2)
+                }
+                .foregroundStyle(.orange)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.06))
+                .cornerRadius(10)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
+
+                if authService.customBiometricEnabled {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.shield.fill")
+                            .font(.caption)
+                        Text(localization.localized(
+                            "Биометрия по камере активна. Сканирование лица требуется при каждом входе.",
+                            "Camera biometrics active. Face scanning required on every login."
+                        ))
+                        .font(.caption)
+                    }
+                    .foregroundStyle(.purple)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.purple.opacity(0.08))
                     .cornerRadius(10)
                     .padding(.horizontal, 10)
                     .padding(.bottom, 10)

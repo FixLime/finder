@@ -9,6 +9,7 @@ class AuthService: ObservableObject {
     @AppStorage("hasSetupPIN") var hasSetupPIN: Bool = false
     @AppStorage("hasSetupBiometric") var hasSetupBiometric: Bool = false
     @AppStorage("biometricBindingEnabled") var biometricBindingEnabled: Bool = false
+    @AppStorage("customBiometricEnabled") var customBiometricEnabled: Bool = false
     @AppStorage("currentUsername") var currentUsername: String = ""
     @AppStorage("currentDisplayName") var currentDisplayName: String = ""
     @AppStorage("currentFinderID") var currentFinderID: String = ""
@@ -23,6 +24,7 @@ class AuthService: ObservableObject {
     @Published var isBannedScreen: Bool = false
     @Published var isDeletedScreen: Bool = false
     @Published var isBiometricLocked: Bool = false
+    @Published var isCustomBiometricLocked: Bool = false
 
     // Текущий пользователь — админ?
     var isAdmin: Bool {
@@ -54,6 +56,9 @@ class AuthService: ObservableObject {
             if !isPINLocked {
                 if biometricBindingEnabled {
                     isBiometricLocked = true
+                    isAuthenticated = false
+                } else if customBiometricEnabled {
+                    isCustomBiometricLocked = true
                     isAuthenticated = false
                 } else {
                     isAuthenticated = true
@@ -183,7 +188,9 @@ class AuthService: ObservableObject {
         storedPIN = ""
         decoyPIN = ""
         biometricBindingEnabled = false
+        customBiometricEnabled = false
         isBiometricLocked = false
+        isCustomBiometricLocked = false
 
         // Регистрируем новый аккаунт
         register(username: username, displayName: displayName)
@@ -226,6 +233,9 @@ class AuthService: ObservableObject {
             if biometricBindingEnabled {
                 isBiometricLocked = true
                 isAuthenticated = false
+            } else if customBiometricEnabled {
+                isCustomBiometricLocked = true
+                isAuthenticated = false
             } else {
                 isAuthenticated = true
                 loadCurrentUser()
@@ -237,6 +247,17 @@ class AuthService: ObservableObject {
 
     func unlockWithBiometric() {
         isBiometricLocked = false
+        if customBiometricEnabled {
+            isCustomBiometricLocked = true
+            isAuthenticated = false
+        } else {
+            isAuthenticated = true
+            loadCurrentUser()
+        }
+    }
+
+    func unlockCustomBiometric() {
+        isCustomBiometricLocked = false
         isAuthenticated = true
         loadCurrentUser()
     }
@@ -245,6 +266,7 @@ class AuthService: ObservableObject {
         isAuthenticated = false
         isPINLocked = true
         isBiometricLocked = false
+        isCustomBiometricLocked = false
         currentUser = nil
     }
 
@@ -275,6 +297,7 @@ class AuthService: ObservableObject {
         hasSetupPIN = false
         hasSetupBiometric = false
         biometricBindingEnabled = false
+        customBiometricEnabled = false
         currentUsername = ""
         currentDisplayName = ""
         currentFinderID = ""
