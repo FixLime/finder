@@ -4,6 +4,7 @@ struct OnboardingView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var localization: LocalizationManager
+    @EnvironmentObject var chatService: ChatService
 
     @State private var currentPage = 0
     @State private var showRegistration = false
@@ -165,6 +166,7 @@ struct OnboardingView: View {
                 .environmentObject(authService)
                 .environmentObject(themeManager)
                 .environmentObject(localization)
+                .environmentObject(chatService)
         }
     }
 }

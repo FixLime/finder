@@ -4,6 +4,7 @@ struct FinderIDSetupView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var localization: LocalizationManager
+    @EnvironmentObject var chatService: ChatService
 
     @State private var username = ""
     @State private var displayName = ""
