@@ -1,5 +1,7 @@
 import SwiftUI
 import PhotosUI
+import AVFoundation
+import Vision
 
 struct GovLoginView: View {
     @EnvironmentObject var localization: LocalizationManager
@@ -9,162 +11,115 @@ struct GovLoginView: View {
     @State private var capturedImage: UIImage?
     @State private var isSubmitting = false
     @State private var isSubmitted = false
-    @State private var showCamera = false
 
     var body: some View {
         NavigationStack {
             if isSubmitted {
                 submittedView
+            } else if capturedImage != nil {
+                reviewView
             } else {
-                formView
+                scannerView
             }
         }
     }
 
-    // MARK: - Form
-    private var formView: some View {
+    // MARK: - Scanner View (live camera)
+    private var scannerView: some View {
+        ZStack {
+            DocumentScannerView(capturedImage: $capturedImage)
+                .ignoresSafeArea()
+
+            VStack {
+                Spacer()
+
+                // Gallery button at bottom
+                HStack(spacing: 16) {
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "photo.on.rectangle")
+                                .font(.system(size: 16))
+                            Text(localization.localized("Галерея", "Gallery"))
+                                .font(.subheadline.bold())
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 14)
+                        .background(.ultraThinMaterial, in: Capsule())
+                    }
+                }
+                .padding(.bottom, 40)
+            }
+        }
+        .navigationTitle(localization.localized("Сканер удостоверения", "ID Scanner"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(8)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+            }
+        }
+        .onChange(of: selectedPhoto) { _, newItem in
+            Task {
+                if let data = try? await newItem?.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    capturedImage = image
+                }
+            }
+        }
+    }
+
+    // MARK: - Review captured photo
+    private var reviewView: some View {
         ScrollView {
             VStack(spacing: 20) {
-                // Header
                 ZStack {
                     Circle()
                         .fill(Color.indigo.opacity(0.15))
-                        .frame(width: 90, height: 90)
+                        .frame(width: 80, height: 80)
                     Image(systemName: "building.columns.fill")
-                        .font(.system(size: 40))
+                        .font(.system(size: 36))
                         .foregroundStyle(.indigo)
                 }
-                .padding(.top, 20)
+                .padding(.top, 16)
 
-                VStack(spacing: 8) {
-                    Text(localization.localized("Вход для госслужащих", "Government Employee Login"))
-                        .font(.title3.bold())
+                Text(localization.localized("Проверьте фото", "Review Photo"))
+                    .font(.title3.bold())
 
-                    Text(localization.localized(
-                        "Для подтверждения статуса прикрепите фото вашего служебного удостоверения",
-                        "To verify your status, attach a photo of your official ID"
-                    ))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                }
-
-                // Photo capture area
-                VStack(spacing: 12) {
-                    Text(localization.localized("Фото удостоверения", "ID Photo"))
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 4)
-
-                    if let image = capturedImage {
-                        // Show captured image
-                        ZStack(alignment: .topTrailing) {
-                            Image(uiImage: image)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(maxHeight: 220)
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .stroke(Color.green.opacity(0.5), lineWidth: 2)
-                                )
-
-                            Button {
-                                capturedImage = nil
-                                selectedPhoto = nil
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 24))
-                                    .foregroundStyle(.white, .red)
-                                    .shadow(radius: 3)
-                            }
-                            .padding(8)
-                        }
-                    } else {
-                        // Document frame
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 16)
-                                .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
-                                .foregroundStyle(.indigo.opacity(0.4))
-                                .frame(height: 200)
-                                .overlay(
-                                    VStack(spacing: 16) {
-                                        // Corner markers
-                                        ZStack {
-                                            // Top-left
-                                            CornerMark()
-                                                .position(x: 30, y: 30)
-                                            // Top-right
-                                            CornerMark()
-                                                .rotationEffect(.degrees(90))
-                                                .position(x: 270, y: 30)
-                                            // Bottom-left
-                                            CornerMark()
-                                                .rotationEffect(.degrees(-90))
-                                                .position(x: 30, y: 170)
-                                            // Bottom-right
-                                            CornerMark()
-                                                .rotationEffect(.degrees(180))
-                                                .position(x: 270, y: 170)
-
-                                            VStack(spacing: 10) {
-                                                Image(systemName: "doc.viewfinder")
-                                                    .font(.system(size: 36))
-                                                    .foregroundStyle(.indigo.opacity(0.5))
-
-                                                Text(localization.localized(
-                                                    "Разместите удостоверение\nв рамке",
-                                                    "Place your ID\nwithin the frame"
-                                                ))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                                .multilineTextAlignment(.center)
-                                            }
-                                        }
-                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                    }
-                                )
-
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.indigo.opacity(0.03))
-                                .frame(height: 200)
-                        }
-                    }
-
-                    // Buttons
-                    HStack(spacing: 12) {
-                        PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "photo.on.rectangle")
-                                    .font(.system(size: 14))
-                                Text(localization.localized("Галерея", "Gallery"))
-                                    .font(.subheadline)
-                            }
-                            .foregroundStyle(.indigo)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .liquidGlassCard(cornerRadius: 12)
-                        }
+                if let image = capturedImage {
+                    ZStack(alignment: .topTrailing) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxHeight: 280)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.green.opacity(0.6), lineWidth: 2.5)
+                            )
 
                         Button {
-                            showCamera = true
+                            capturedImage = nil
+                            selectedPhoto = nil
                         } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "camera.fill")
-                                    .font(.system(size: 14))
-                                Text(localization.localized("Камера", "Camera"))
-                                    .font(.subheadline)
-                            }
-                            .foregroundStyle(.indigo)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .liquidGlassCard(cornerRadius: 12)
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 26))
+                                .foregroundStyle(.white, .red)
+                                .shadow(radius: 3)
                         }
+                        .padding(10)
                     }
+                    .padding(.horizontal, 24)
                 }
-                .padding(.horizontal, 24)
 
                 // Info
                 VStack(alignment: .leading, spacing: 10) {
@@ -179,28 +134,45 @@ struct GovLoginView: View {
                 .liquidGlassCard(cornerRadius: 14)
                 .padding(.horizontal, 24)
 
-                // Submit button
-                Button {
-                    submitApplication()
-                } label: {
-                    HStack(spacing: 8) {
-                        if isSubmitting {
-                            ProgressView()
-                                .tint(.white)
-                                .scaleEffect(0.8)
+                // Buttons
+                VStack(spacing: 12) {
+                    Button {
+                        submitApplication()
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isSubmitting {
+                                ProgressView()
+                                    .tint(.white)
+                                    .scaleEffect(0.8)
+                            }
+                            Text(localization.localized("Отправить на проверку", "Submit for Review"))
+                                .font(.headline)
                         }
-                        Text(localization.localized("Отправить на проверку", "Submit for Review"))
-                            .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(isSubmitting ? Color.gray : Color.indigo)
+                        )
                     }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(capturedImage == nil || isSubmitting ? Color.gray : Color.indigo)
-                    )
+                    .disabled(isSubmitting)
+
+                    Button {
+                        capturedImage = nil
+                        selectedPhoto = nil
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.counterclockwise")
+                            Text(localization.localized("Переснять", "Retake"))
+                        }
+                        .font(.subheadline)
+                        .foregroundStyle(.indigo)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .liquidGlassCard(cornerRadius: 12)
+                    }
                 }
-                .disabled(capturedImage == nil || isSubmitting)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 30)
             }
@@ -211,18 +183,6 @@ struct GovLoginView: View {
             ToolbarItem(placement: .topBarLeading) {
                 Button(localization.cancel) { dismiss() }
             }
-        }
-        .onChange(of: selectedPhoto) { _, newItem in
-            Task {
-                if let data = try? await newItem?.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    capturedImage = image
-                }
-            }
-        }
-        .fullScreenCover(isPresented: $showCamera) {
-            CameraPickerView(image: $capturedImage)
-                .ignoresSafeArea()
         }
     }
 
@@ -254,7 +214,6 @@ struct GovLoginView: View {
                 .padding(.horizontal, 40)
             }
 
-            // Status card
             HStack(spacing: 10) {
                 Image(systemName: "clock.badge.checkmark")
                     .font(.system(size: 20))
@@ -309,7 +268,6 @@ struct GovLoginView: View {
 
     private func submitApplication() {
         isSubmitting = true
-        // Simulate submission
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             withAnimation(.spring(response: 0.4)) {
                 isSubmitting = false
@@ -321,54 +279,345 @@ struct GovLoginView: View {
     }
 }
 
-// MARK: - Corner Mark
-struct CornerMark: View {
-    var body: some View {
-        Path { path in
-            path.move(to: CGPoint(x: 0, y: 20))
-            path.addLine(to: CGPoint(x: 0, y: 0))
-            path.addLine(to: CGPoint(x: 20, y: 0))
+// MARK: - Document Scanner with Live Camera + Vision Detection
+struct DocumentScannerView: UIViewControllerRepresentable {
+    @Binding var capturedImage: UIImage?
+
+    func makeUIViewController(context: Context) -> DocumentScannerViewController {
+        let vc = DocumentScannerViewController()
+        vc.onCapture = { image in
+            capturedImage = image
         }
-        .stroke(Color.indigo.opacity(0.6), style: StrokeStyle(lineWidth: 3, lineCap: .round))
-        .frame(width: 20, height: 20)
+        return vc
     }
+
+    func updateUIViewController(_ uiViewController: DocumentScannerViewController, context: Context) {}
 }
 
-// MARK: - Camera Picker
-struct CameraPickerView: UIViewControllerRepresentable {
-    @Binding var image: UIImage?
-    @Environment(\.dismiss) var dismiss
+class DocumentScannerViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate {
+    var onCapture: ((UIImage) -> Void)?
 
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.delegate = context.coordinator
-        return picker
+    private let captureSession = AVCaptureSession()
+    private let photoOutput = AVCapturePhotoOutput()
+    private let videoOutput = AVCaptureVideoDataOutput()
+    private var previewLayer: AVCaptureVideoPreviewLayer!
+
+    // UI
+    private let frameOverlay = UIView()
+    private let topLeftCorner = CAShapeLayer()
+    private let topRightCorner = CAShapeLayer()
+    private let bottomLeftCorner = CAShapeLayer()
+    private let bottomRightCorner = CAShapeLayer()
+    private let dimLayer = CAShapeLayer()
+    private let statusLabel = UILabel()
+    private let captureButton = UIButton(type: .system)
+    private let hintLabel = UILabel()
+    private let detectedRectLayer = CAShapeLayer()
+
+    // State
+    private var documentDetected = false
+    private var stableFrameCount = 0
+    private let requiredStableFrames = 8
+
+    // Frame rect for the ID card cutout (set in viewDidLayoutSubviews)
+    private var cardRect: CGRect = .zero
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+        setupCamera()
+        setupOverlay()
     }
 
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        previewLayer?.frame = view.bounds
+        updateOverlay()
     }
 
-    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        let parent: CameraPickerView
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            self?.captureSession.startRunning()
+        }
+    }
 
-        init(_ parent: CameraPickerView) {
-            self.parent = parent
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        captureSession.stopRunning()
+    }
+
+    // MARK: - Camera Setup
+    private func setupCamera() {
+        captureSession.sessionPreset = .high
+
+        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+              let input = try? AVCaptureDeviceInput(device: camera) else { return }
+
+        if captureSession.canAddInput(input) {
+            captureSession.addInput(input)
         }
 
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            if let image = info[.originalImage] as? UIImage {
-                parent.image = image
+        if captureSession.canAddOutput(photoOutput) {
+            captureSession.addOutput(photoOutput)
+        }
+
+        videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "video.queue"))
+        videoOutput.alwaysDiscardsLateVideoFrames = true
+        if captureSession.canAddOutput(videoOutput) {
+            captureSession.addOutput(videoOutput)
+        }
+
+        previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
+        previewLayer.videoGravity = .resizeAspectFill
+        previewLayer.frame = view.bounds
+        view.layer.addSublayer(previewLayer)
+    }
+
+    // MARK: - Overlay
+    private func setupOverlay() {
+        // Dim layer (darkens everything outside the card frame)
+        dimLayer.fillRule = .evenOdd
+        dimLayer.fillColor = UIColor.black.withAlphaComponent(0.55).cgColor
+        view.layer.addSublayer(dimLayer)
+
+        // Detected rect highlight
+        detectedRectLayer.strokeColor = UIColor.systemGreen.withAlphaComponent(0.7).cgColor
+        detectedRectLayer.fillColor = UIColor.systemGreen.withAlphaComponent(0.08).cgColor
+        detectedRectLayer.lineWidth = 2.5
+        view.layer.addSublayer(detectedRectLayer)
+
+        // Corner markers
+        [topLeftCorner, topRightCorner, bottomLeftCorner, bottomRightCorner].forEach {
+            $0.strokeColor = UIColor.white.cgColor
+            $0.fillColor = UIColor.clear.cgColor
+            $0.lineWidth = 3.5
+            $0.lineCap = .round
+            view.layer.addSublayer($0)
+        }
+
+        // Status label
+        statusLabel.textAlignment = .center
+        statusLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        statusLabel.textColor = .white
+        statusLabel.layer.shadowColor = UIColor.black.cgColor
+        statusLabel.layer.shadowOffset = .zero
+        statusLabel.layer.shadowRadius = 4
+        statusLabel.layer.shadowOpacity = 0.8
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(statusLabel)
+
+        // Hint label at top
+        hintLabel.text = ""
+        hintLabel.textAlignment = .center
+        hintLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        hintLabel.textColor = UIColor.white.withAlphaComponent(0.7)
+        hintLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(hintLabel)
+
+        // Capture button
+        captureButton.translatesAutoresizingMaskIntoConstraints = false
+        captureButton.backgroundColor = .white
+        captureButton.layer.cornerRadius = 36
+        captureButton.layer.borderWidth = 4
+        captureButton.layer.borderColor = UIColor.white.withAlphaComponent(0.4).cgColor
+        captureButton.addTarget(self, action: #selector(capturePhoto), for: .touchUpInside)
+
+        let innerCircle = UIView()
+        innerCircle.backgroundColor = .white
+        innerCircle.layer.cornerRadius = 28
+        innerCircle.translatesAutoresizingMaskIntoConstraints = false
+        innerCircle.isUserInteractionEnabled = false
+        captureButton.addSubview(innerCircle)
+
+        view.addSubview(captureButton)
+
+        NSLayoutConstraint.activate([
+            captureButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            captureButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -90),
+            captureButton.widthAnchor.constraint(equalToConstant: 72),
+            captureButton.heightAnchor.constraint(equalToConstant: 72),
+
+            innerCircle.centerXAnchor.constraint(equalTo: captureButton.centerXAnchor),
+            innerCircle.centerYAnchor.constraint(equalTo: captureButton.centerYAnchor),
+            innerCircle.widthAnchor.constraint(equalToConstant: 56),
+            innerCircle.heightAnchor.constraint(equalToConstant: 56),
+
+            statusLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            statusLabel.bottomAnchor.constraint(equalTo: captureButton.topAnchor, constant: -24),
+
+            hintLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            hintLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 50),
+        ])
+    }
+
+    private func updateOverlay() {
+        let bounds = view.bounds
+        // ID card aspect ratio ~1.586 (CR80 standard)
+        let cardW = bounds.width - 48
+        let cardH = cardW / 1.586
+        let cardX = (bounds.width - cardW) / 2
+        let cardY = (bounds.height - cardH) / 2 - 40
+        cardRect = CGRect(x: cardX, y: cardY, width: cardW, height: cardH)
+
+        // Dim layer
+        let fullPath = UIBezierPath(rect: bounds)
+        let cutout = UIBezierPath(roundedRect: cardRect, cornerRadius: 14)
+        fullPath.append(cutout)
+        dimLayer.path = fullPath.cgPath
+
+        // Corner markers
+        let cornerLen: CGFloat = 30
+        let r = cardRect
+
+        func cornerPath(_ points: [(CGFloat, CGFloat)]) -> CGPath {
+            let p = UIBezierPath()
+            p.move(to: CGPoint(x: points[0].0, y: points[0].1))
+            for pt in points.dropFirst() { p.addLine(to: CGPoint(x: pt.0, y: pt.1)) }
+            return p.cgPath
+        }
+
+        topLeftCorner.path = cornerPath([
+            (r.minX, r.minY + cornerLen),
+            (r.minX, r.minY),
+            (r.minX + cornerLen, r.minY)
+        ])
+        topRightCorner.path = cornerPath([
+            (r.maxX - cornerLen, r.minY),
+            (r.maxX, r.minY),
+            (r.maxX, r.minY + cornerLen)
+        ])
+        bottomLeftCorner.path = cornerPath([
+            (r.minX, r.maxY - cornerLen),
+            (r.minX, r.maxY),
+            (r.minX + cornerLen, r.maxY)
+        ])
+        bottomRightCorner.path = cornerPath([
+            (r.maxX - cornerLen, r.maxY),
+            (r.maxX, r.maxY),
+            (r.maxX, r.maxY - cornerLen)
+        ])
+    }
+
+    // MARK: - Vision Detection
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+
+        let request = VNDetectRectanglesRequest { [weak self] request, _ in
+            guard let self = self else { return }
+            let rects = request.results as? [VNRectangleObservation] ?? []
+
+            DispatchQueue.main.async {
+                if let best = rects.first {
+                    self.handleDetectedRect(best)
+                } else {
+                    self.handleNoDetection()
+                }
             }
-            parent.dismiss()
+        }
+        request.minimumAspectRatio = 1.2
+        request.maximumAspectRatio = 2.0
+        request.minimumSize = 0.15
+        request.minimumConfidence = 0.6
+        request.maximumObservations = 1
+
+        try? VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .right).perform([request])
+    }
+
+    private func handleDetectedRect(_ rect: VNRectangleObservation) {
+        guard let previewLayer = self.previewLayer else { return }
+
+        // Convert Vision normalized coords to view coords
+        let tl = previewLayer.layerPointConverted(fromCaptureDevicePoint: CGPoint(x: rect.topLeft.x, y: 1 - rect.topLeft.y))
+        let tr = previewLayer.layerPointConverted(fromCaptureDevicePoint: CGPoint(x: rect.topRight.x, y: 1 - rect.topRight.y))
+        let bl = previewLayer.layerPointConverted(fromCaptureDevicePoint: CGPoint(x: rect.bottomLeft.x, y: 1 - rect.bottomLeft.y))
+        let br = previewLayer.layerPointConverted(fromCaptureDevicePoint: CGPoint(x: rect.bottomRight.x, y: 1 - rect.bottomRight.y))
+
+        // Draw detected rect
+        let path = UIBezierPath()
+        path.move(to: tl)
+        path.addLine(to: tr)
+        path.addLine(to: br)
+        path.addLine(to: bl)
+        path.close()
+        detectedRectLayer.path = path.cgPath
+
+        // Check if the detected rect is within the card frame
+        let detectedBounds = path.bounds
+        let intersection = cardRect.intersection(detectedBounds)
+        let overlapRatio = (intersection.width * intersection.height) / (detectedBounds.width * detectedBounds.height)
+        let sizeRatio = (detectedBounds.width * detectedBounds.height) / (cardRect.width * cardRect.height)
+
+        let isAligned = overlapRatio > 0.75 && sizeRatio > 0.35
+
+        if isAligned {
+            stableFrameCount += 1
+            setCornerColor(.systemGreen)
+            detectedRectLayer.strokeColor = UIColor.systemGreen.cgColor
+            detectedRectLayer.fillColor = UIColor.systemGreen.withAlphaComponent(0.06).cgColor
+
+            if stableFrameCount >= requiredStableFrames {
+                statusLabel.text = "✓ Удостоверение найдено"
+                statusLabel.textColor = .systemGreen
+                hintLabel.text = "Нажмите кнопку для снимка"
+            } else {
+                statusLabel.text = "Держите ровно..."
+                statusLabel.textColor = .systemYellow
+                hintLabel.text = ""
+            }
+        } else {
+            stableFrameCount = max(0, stableFrameCount - 2)
+            setCornerColor(.systemYellow)
+            detectedRectLayer.strokeColor = UIColor.systemYellow.cgColor
+            detectedRectLayer.fillColor = UIColor.systemYellow.withAlphaComponent(0.04).cgColor
+            statusLabel.text = "Поместите документ в рамку"
+            statusLabel.textColor = .white
+            hintLabel.text = ""
         }
 
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.dismiss()
+        documentDetected = true
+    }
+
+    private func handleNoDetection() {
+        stableFrameCount = max(0, stableFrameCount - 1)
+        detectedRectLayer.path = nil
+        documentDetected = false
+        setCornerColor(.white)
+        statusLabel.text = "Наведите на удостоверение"
+        statusLabel.textColor = .white
+        hintLabel.text = ""
+    }
+
+    private func setCornerColor(_ color: UIColor) {
+        [topLeftCorner, topRightCorner, bottomLeftCorner, bottomRightCorner].forEach {
+            $0.strokeColor = color.cgColor
         }
+    }
+
+    // MARK: - Capture
+    @objc private func capturePhoto() {
+        let settings = AVCapturePhotoSettings()
+        photoOutput.capturePhoto(with: settings, delegate: self)
+
+        // Button animation
+        UIView.animate(withDuration: 0.1, animations: {
+            self.captureButton.transform = CGAffineTransform(scaleX: 0.9, y: 0.9)
+        }) { _ in
+            UIView.animate(withDuration: 0.1) {
+                self.captureButton.transform = .identity
+            }
+        }
+    }
+
+    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        guard let data = photo.fileDataRepresentation(),
+              let image = UIImage(data: data) else { return }
+
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+
+        captureSession.stopRunning()
+        onCapture?(image)
     }
 }
 
