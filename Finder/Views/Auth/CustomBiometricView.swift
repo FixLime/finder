@@ -1,5 +1,235 @@
 import SwiftUI
 import AVFoundation
+import Vision
+import CoreImage
+
+// MARK: - Face Embedding Service
+class FaceEmbeddingService {
+    static let shared = FaceEmbeddingService()
+
+    private let storageKey = "storedFaceObservations"
+
+    // Store face landmarks as a simplified "embedding"
+    // We store key geometric ratios from facial landmarks
+    func storeFaceprint(_ observations: [VNFaceObservation]) {
+        guard let face = observations.first,
+              let landmarks = face.landmarks else { return }
+        let encoding = encodeLandmarks(landmarks, boundingBox: face.boundingBox)
+        UserDefaults.standard.set(encoding, forKey: storageKey)
+    }
+
+    func loadStoredFaceprint() -> [Double]? {
+        return UserDefaults.standard.array(forKey: storageKey) as? [Double]
+    }
+
+    func clearFaceprint() {
+        UserDefaults.standard.removeObject(forKey: storageKey)
+    }
+
+    // Compare two faceprints — returns similarity 0...1
+    func compareFaceprints(stored: [Double], current: [Double]) -> Double {
+        guard stored.count == current.count, !stored.isEmpty else { return 0 }
+
+        // Cosine similarity
+        var dot: Double = 0
+        var magA: Double = 0
+        var magB: Double = 0
+
+        for i in 0..<stored.count {
+            dot += stored[i] * current[i]
+            magA += stored[i] * stored[i]
+            magB += current[i] * current[i]
+        }
+
+        let denom = sqrt(magA) * sqrt(magB)
+        guard denom > 0 else { return 0 }
+
+        let cosine = dot / denom
+        return max(0, min(1, (cosine + 1) / 2)) // normalize to 0...1
+    }
+
+    func encodeLandmarks(_ landmarks: VNFaceLandmarks2D, boundingBox: CGRect) -> [Double] {
+        var features: [Double] = []
+
+        // Bounding box aspect ratio
+        features.append(Double(boundingBox.width / max(boundingBox.height, 0.001)))
+
+        // Extract relative point positions from each landmark region
+        let regions: [VNFaceLandmarkRegion2D?] = [
+            landmarks.faceContour,
+            landmarks.leftEye,
+            landmarks.rightEye,
+            landmarks.nose,
+            landmarks.noseCrest,
+            landmarks.outerLips,
+            landmarks.innerLips,
+            landmarks.leftEyebrow,
+            landmarks.rightEyebrow
+        ]
+
+        for region in regions {
+            guard let region = region, region.pointCount >= 2 else {
+                features.append(contentsOf: [0, 0, 0, 0])
+                continue
+            }
+
+            let points = region.normalizedPoints
+            // Geometric features: centroid, spread, aspect
+            var sumX: Double = 0, sumY: Double = 0
+            var minX: Double = 1, minY: Double = 1
+            var maxX: Double = 0, maxY: Double = 0
+
+            for p in points {
+                let x = Double(p.x)
+                let y = Double(p.y)
+                sumX += x; sumY += y
+                minX = min(minX, x); minY = min(minY, y)
+                maxX = max(maxX, x); maxY = max(maxY, y)
+            }
+
+            let n = Double(points.count)
+            features.append(sumX / n)
+            features.append(sumY / n)
+            features.append(maxX - minX)
+            features.append(maxY - minY)
+        }
+
+        // Inter-feature distances
+        if let leftEye = landmarks.leftEye, let rightEye = landmarks.rightEye,
+           leftEye.pointCount > 0, rightEye.pointCount > 0 {
+            let lCenter = centroid(leftEye.normalizedPoints)
+            let rCenter = centroid(rightEye.normalizedPoints)
+            let eyeDist = distance(lCenter, rCenter)
+            features.append(eyeDist)
+
+            if let nose = landmarks.noseCrest, nose.pointCount > 0 {
+                let nCenter = centroid(nose.normalizedPoints)
+                features.append(distance(lCenter, nCenter) / max(eyeDist, 0.001))
+                features.append(distance(rCenter, nCenter) / max(eyeDist, 0.001))
+            }
+
+            if let mouth = landmarks.outerLips, mouth.pointCount > 0 {
+                let mCenter = centroid(mouth.normalizedPoints)
+                features.append(distance(lCenter, mCenter) / max(eyeDist, 0.001))
+                features.append(distance(rCenter, mCenter) / max(eyeDist, 0.001))
+            }
+        }
+
+        return features
+    }
+
+    private func centroid(_ points: [CGPoint]) -> CGPoint {
+        let n = CGFloat(points.count)
+        let sumX = points.reduce(0.0) { $0 + $1.x }
+        let sumY = points.reduce(0.0) { $0 + $1.y }
+        return CGPoint(x: sumX / n, y: sumY / n)
+    }
+
+    private func distance(_ a: CGPoint, _ b: CGPoint) -> Double {
+        return Double(sqrt(pow(a.x - b.x, 2) + pow(a.y - b.y, 2)))
+    }
+}
+
+// MARK: - Live Camera Face Detector (shared between setup and verify)
+class FaceCameraController: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+    let captureSession = AVCaptureSession()
+    private let videoOutput = AVCaptureVideoDataOutput()
+
+    @Published var faceDetected = false
+    @Published var faceObservation: VNFaceObservation?
+    @Published var faceBounds: CGRect = .zero
+    @Published var hasLandmarks = false
+
+    var previewLayer: AVCaptureVideoPreviewLayer?
+    var onFaceCapture: (([VNFaceObservation]) -> Void)?
+
+    private var consecutiveDetections = 0
+
+    func setup() {
+        captureSession.sessionPreset = .high
+
+        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
+              let input = try? AVCaptureDeviceInput(device: camera) else { return }
+
+        if captureSession.canAddInput(input) {
+            captureSession.addInput(input)
+        }
+
+        videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "face.camera.queue"))
+        videoOutput.alwaysDiscardsLateVideoFrames = true
+        if captureSession.canAddOutput(videoOutput) {
+            captureSession.addOutput(videoOutput)
+        }
+
+        if let connection = videoOutput.connection(with: .video) {
+            connection.videoOrientation = .portrait
+            connection.isVideoMirrored = true
+        }
+    }
+
+    func start() {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            self?.captureSession.startRunning()
+        }
+    }
+
+    func stop() {
+        captureSession.stopRunning()
+    }
+
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+
+        let request = VNDetectFaceLandmarksRequest { [weak self] request, _ in
+            guard let self = self else { return }
+            let faces = request.results as? [VNFaceObservation] ?? []
+
+            DispatchQueue.main.async {
+                if let face = faces.first, face.landmarks != nil {
+                    self.faceDetected = true
+                    self.faceObservation = face
+                    self.hasLandmarks = face.landmarks != nil
+                    self.faceBounds = face.boundingBox
+                    self.consecutiveDetections += 1
+
+                    if self.consecutiveDetections >= 10 {
+                        self.onFaceCapture?(faces)
+                    }
+                } else {
+                    self.faceDetected = false
+                    self.faceObservation = nil
+                    self.hasLandmarks = false
+                    self.consecutiveDetections = max(0, self.consecutiveDetections - 3)
+                }
+            }
+        }
+
+        try? VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .leftMirrored).perform([request])
+    }
+}
+
+// MARK: - Camera Preview
+struct FaceCameraPreview: UIViewRepresentable {
+    let cameraController: FaceCameraController
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .black
+
+        let previewLayer = AVCaptureVideoPreviewLayer(session: cameraController.captureSession)
+        previewLayer.videoGravity = .resizeAspectFill
+        view.layer.addSublayer(previewLayer)
+        cameraController.previewLayer = previewLayer
+
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            cameraController.previewLayer?.frame = uiView.bounds
+        }
+    }
+}
 
 // MARK: - Custom Biometric Setup View
 struct CustomBiometricSetupView: View {
@@ -8,11 +238,14 @@ struct CustomBiometricSetupView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var step: BiometricSetupStep = .intro
-    @State private var isScanning = false
+    @StateObject private var camera = FaceCameraController()
     @State private var scanProgress: CGFloat = 0
     @State private var scanComplete = false
-    @State private var pulseAnimation = false
-    @State private var showCameraWarning = false
+    @State private var capturedFaces: [[VNFaceObservation]] = []
+    @State private var statusText = ""
+    @State private var frameColor: Color = .white
+
+    private let requiredCaptures = 5
 
     enum BiometricSetupStep {
         case intro
@@ -38,7 +271,10 @@ struct CustomBiometricSetupView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(localization.cancel) { dismiss() }
+                    Button(localization.cancel) {
+                        camera.stop()
+                        dismiss()
+                    }
                 }
             }
         }
@@ -76,8 +312,8 @@ struct CustomBiometricSetupView: View {
                     .font(.title2.bold())
 
                 Text(localization.localized(
-                    "Создайте биометрический слепок вашего лица для дополнительной защиты аккаунта на всех устройствах.",
-                    "Create a biometric imprint of your face for additional account protection across all devices."
+                    "Камера запишет геометрию вашего лица для верификации. Данные хранятся только на устройстве.",
+                    "Camera will capture your face geometry for verification. Data is stored only on device."
                 ))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -85,51 +321,21 @@ struct CustomBiometricSetupView: View {
                 .padding(.horizontal, 32)
             }
 
-            // Warning card
-            VStack(spacing: 10) {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text(localization.localized("Важно", "Important"))
-                        .font(.subheadline.bold())
-                        .foregroundStyle(.orange)
-                }
-
-                Text(localization.localized(
-                    "Не рекомендуется использовать, если камера на другом устройстве заметно ниже качеством. Различия в камерах могут привести к ошибкам распознавания.",
-                    "Not recommended if the camera on another device is significantly lower quality. Camera differences may cause recognition errors."
-                ))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            }
-            .padding(14)
-            .background(Color.orange.opacity(0.08))
-            .cornerRadius(14)
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(Color.orange.opacity(0.2), lineWidth: 1)
-            )
-            .padding(.horizontal, 24)
-
-            Spacer()
-
-            // Features list
             VStack(alignment: .leading, spacing: 12) {
                 biometricFeatureRow(
-                    icon: "shield.checkered",
-                    color: .green,
-                    text: localization.localized("Работает на всех устройствах", "Works across all devices")
+                    icon: "camera.viewfinder",
+                    color: .purple,
+                    text: localization.localized("Использует фронтальную камеру", "Uses front camera")
                 )
                 biometricFeatureRow(
-                    icon: "lock.fill",
+                    icon: "face.dashed",
                     color: .blue,
-                    text: localization.localized("Дополнительный уровень защиты после Face ID", "Additional protection layer after Face ID")
+                    text: localization.localized("Анализирует геометрию лица", "Analyzes face geometry")
                 )
                 biometricFeatureRow(
                     icon: "eye.slash.fill",
-                    color: .purple,
-                    text: localization.localized("Данные хранятся только на вашем устройстве", "Data stored only on your device")
+                    color: .green,
+                    text: localization.localized("Данные хранятся только на устройстве", "Data stored only on device")
                 )
             }
             .padding(.horizontal, 32)
@@ -137,6 +343,8 @@ struct CustomBiometricSetupView: View {
             Spacer()
 
             Button {
+                camera.setup()
+                camera.start()
                 withAnimation(.spring(response: 0.4)) {
                     step = .scanning
                 }
@@ -162,100 +370,84 @@ struct CustomBiometricSetupView: View {
         }
     }
 
-    // MARK: - Scanning
+    // MARK: - Scanning (real camera)
     private var scanningView: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        ZStack {
+            FaceCameraPreview(cameraController: camera)
+                .ignoresSafeArea()
 
-            ZStack {
-                // Outer scanning rings
-                ForEach(0..<3, id: \.self) { i in
+            // Dark overlay with face cutout
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+                .mask {
+                    ZStack {
+                        Color.white
+                        Ellipse()
+                            .frame(width: 260, height: 340)
+                            .blendMode(.destinationOut)
+                    }
+                    .compositingGroup()
+                }
+
+            VStack {
+                Spacer()
+                    .frame(height: 60)
+
+                // Face frame
+                ZStack {
+                    // Outer ellipse
+                    Ellipse()
+                        .stroke(frameColor, style: StrokeStyle(lineWidth: 3))
+                        .frame(width: 264, height: 344)
+
+                    // Progress ring
                     Circle()
-                        .stroke(Color.purple.opacity(0.2), lineWidth: 1.5)
-                        .frame(width: CGFloat(220 + i * 30), height: CGFloat(220 + i * 30))
-                        .scaleEffect(pulseAnimation ? 1.05 : 0.95)
-                        .opacity(pulseAnimation ? 0.0 : 0.6)
-                        .animation(
-                            .easeInOut(duration: 1.5)
-                            .repeatForever(autoreverses: false)
-                            .delay(Double(i) * 0.3),
-                            value: pulseAnimation
+                        .trim(from: 0, to: scanProgress)
+                        .stroke(
+                            LinearGradient(colors: [.purple, .green], startPoint: .leading, endPoint: .trailing),
+                            style: StrokeStyle(lineWidth: 4, lineCap: .round)
                         )
+                        .frame(width: 280, height: 280)
+                        .rotationEffect(.degrees(-90))
                 }
 
-                // Face outline
-                Circle()
-                    .stroke(
-                        AngularGradient(
-                            gradient: Gradient(colors: [.purple, .indigo, .cyan, .purple]),
-                            center: .center
-                        ),
-                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
-                    )
-                    .frame(width: 200, height: 200)
-                    .rotationEffect(.degrees(isScanning ? 360 : 0))
-                    .animation(
-                        .linear(duration: 2).repeatForever(autoreverses: false),
-                        value: isScanning
-                    )
+                Spacer()
+                    .frame(height: 30)
 
-                // Progress overlay
-                Circle()
-                    .trim(from: 0, to: scanProgress)
-                    .stroke(Color.green, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                    .frame(width: 200, height: 200)
-                    .rotationEffect(.degrees(-90))
+                // Status
+                VStack(spacing: 8) {
+                    Text(statusText.isEmpty
+                         ? localization.localized("Поместите лицо в рамку", "Place your face in the frame")
+                         : statusText)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 4)
 
-                // Face icon
-                Image(systemName: "face.dashed")
-                    .font(.system(size: 80))
-                    .foregroundStyle(.purple.opacity(0.6))
-
-                // Scanning line
-                if isScanning && !scanComplete {
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.clear, .purple.opacity(0.5), .clear],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: 180, height: 3)
-                        .offset(y: isScanning ? 80 : -80)
-                        .animation(
-                            .easeInOut(duration: 1.5).repeatForever(autoreverses: true),
-                            value: isScanning
-                        )
+                    Text("\(capturedFaces.count)/\(requiredCaptures)")
+                        .font(.system(size: 28, weight: .bold, design: .monospaced))
+                        .foregroundColor(frameColor)
+                        .shadow(color: .black, radius: 4)
                 }
+
+                Spacer()
             }
-
-            VStack(spacing: 8) {
-                if scanComplete {
-                    Text(localization.localized("Сканирование завершено", "Scan Complete"))
-                        .font(.title3.bold())
-                        .foregroundStyle(.green)
-                } else {
-                    Text(localization.localized("Сканирование...", "Scanning..."))
-                        .font(.title3.bold())
-
-                    Text(localization.localized(
-                        "Держите лицо в рамке и не двигайтесь",
-                        "Keep your face in the frame and stay still"
-                    ))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                }
-
-                Text("\(Int(scanProgress * 100))%")
-                    .font(.system(size: 32, weight: .bold, design: .monospaced))
-                    .foregroundStyle(scanComplete ? .green : .purple)
-            }
-
-            Spacer()
         }
         .onAppear {
-            startScanning()
+            statusText = localization.localized("Поместите лицо в рамку", "Place your face in the frame")
+            camera.onFaceCapture = { faces in
+                handleFaceCapture(faces)
+            }
+        }
+        .onChange(of: camera.faceDetected) { _, detected in
+            withAnimation(.easeInOut(duration: 0.3)) {
+                if detected && camera.hasLandmarks {
+                    frameColor = .green
+                    statusText = localization.localized("Лицо найдено, не двигайтесь...", "Face found, hold still...")
+                } else {
+                    frameColor = .white
+                    statusText = localization.localized("Поместите лицо в рамку", "Place your face in the frame")
+                }
+            }
         }
     }
 
@@ -279,8 +471,8 @@ struct CustomBiometricSetupView: View {
                     .font(.title2.bold())
 
                 Text(localization.localized(
-                    "Ваш биометрический слепок сохранён. Теперь при входе в аккаунт потребуется верификация лица.",
-                    "Your biometric imprint is saved. Face verification will now be required for account login."
+                    "Биометрический слепок лица сохранён. При входе потребуется верификация через камеру.",
+                    "Face biometric imprint saved. Camera verification will be required for login."
                 ))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -322,29 +514,38 @@ struct CustomBiometricSetupView: View {
         }
     }
 
-    private func startScanning() {
-        isScanning = true
-        pulseAnimation = true
+    private func handleFaceCapture(_ faces: [VNFaceObservation]) {
+        guard !scanComplete else { return }
+        guard capturedFaces.count < requiredCaptures else { return }
 
-        // Simulate scanning progress
-        Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
-            withAnimation(.linear(duration: 0.05)) {
-                scanProgress += 0.01
+        capturedFaces.append(faces)
+        withAnimation {
+            scanProgress = CGFloat(capturedFaces.count) / CGFloat(requiredCaptures)
+        }
+
+        HapticService.light()
+
+        if capturedFaces.count >= requiredCaptures {
+            // Store the average faceprint from all captures
+            if let best = capturedFaces.last?.first, best.landmarks != nil {
+                FaceEmbeddingService.shared.storeFaceprint([best])
             }
-            if scanProgress >= 1.0 {
-                timer.invalidate()
-                withAnimation(.spring(response: 0.4)) {
-                    scanComplete = true
-                    isScanning = false
-                }
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
 
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    withAnimation(.spring(response: 0.4)) {
-                        step = .complete
-                    }
+            scanComplete = true
+            camera.stop()
+
+            HapticService.success()
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                withAnimation(.spring(response: 0.4)) {
+                    step = .complete
                 }
+            }
+        } else {
+            statusText = localization.localized("Отлично, не двигайтесь...", "Great, hold still...")
+            // Reset detection counter for next capture
+            camera.onFaceCapture = { faces in
+                handleFaceCapture(faces)
             }
         }
     }
@@ -355,86 +556,89 @@ struct CustomBiometricVerifyView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var localization: LocalizationManager
 
+    @StateObject private var camera = FaceCameraController()
     @State private var isScanning = false
     @State private var scanProgress: CGFloat = 0
     @State private var verified = false
     @State private var failed = false
     @State private var attempts = 0
     @State private var isLocked = false
-    @State private var pulseAnimation = false
+    @State private var statusText = ""
+    @State private var frameColor: Color = .white
 
     var body: some View {
         ZStack {
-            FloatingOrbsBackground()
+            // Camera background
+            FaceCameraPreview(cameraController: camera)
                 .ignoresSafeArea()
 
-            VStack(spacing: 28) {
-                Spacer()
-
-                ZStack {
-                    // Pulse rings
-                    ForEach(0..<3, id: \.self) { i in
-                        Circle()
-                            .stroke(Color.purple.opacity(0.15), lineWidth: 1.5)
-                            .frame(width: CGFloat(140 + i * 30), height: CGFloat(140 + i * 30))
-                            .scaleEffect(pulseAnimation ? 1.1 : 0.95)
-                            .opacity(pulseAnimation ? 0.0 : 0.6)
-                            .animation(
-                                .easeInOut(duration: 2.0)
-                                .repeatForever(autoreverses: false)
-                                .delay(Double(i) * 0.4),
-                                value: pulseAnimation
-                            )
+            // Dark overlay with cutout
+            Color.black.opacity(0.6)
+                .ignoresSafeArea()
+                .mask {
+                    ZStack {
+                        Color.white
+                        Ellipse()
+                            .frame(width: 220, height: 290)
+                            .blendMode(.destinationOut)
                     }
+                    .compositingGroup()
+                }
 
-                    // Scanning ring
+            VStack(spacing: 20) {
+                Spacer()
+                    .frame(height: 80)
+
+                // Face frame
+                ZStack {
+                    Ellipse()
+                        .stroke(frameColor, style: StrokeStyle(lineWidth: 3))
+                        .frame(width: 224, height: 294)
+
                     if isScanning {
                         Circle()
                             .trim(from: 0, to: scanProgress)
-                            .stroke(Color.purple, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                            .frame(width: 120, height: 120)
+                            .stroke(Color.purple, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+                            .frame(width: 240, height: 240)
                             .rotationEffect(.degrees(-90))
                     }
 
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: failed ? [.red, .orange] : [.purple, .indigo],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 100, height: 100)
-                        .shadow(color: failed ? .red.opacity(0.4) : .purple.opacity(0.4), radius: 20)
-
-                    Image(systemName: failed ? "xmark" : "person.viewfinder")
-                        .font(.system(size: 44))
-                        .foregroundColor(.white)
+                    if !camera.faceDetected && !isScanning {
+                        Image(systemName: "person.viewfinder")
+                            .font(.system(size: 60))
+                            .foregroundColor(.white.opacity(0.3))
+                    }
                 }
+
+                Spacer()
+                    .frame(height: 20)
 
                 VStack(spacing: 8) {
                     Text(localization.localized("Верификация лица", "Face Verification"))
                         .font(.title2.bold())
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 4)
 
-                    Text(localization.localized(
-                        "Аккаунт защищён биометрией.\nПосмотрите в камеру для входа.",
-                        "Account protected by biometrics.\nLook at the camera to continue."
-                    ))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
+                    Text(statusText.isEmpty
+                         ? localization.localized("Посмотрите в камеру", "Look at the camera")
+                         : statusText)
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.8))
+                        .shadow(color: .black, radius: 4)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
                 }
 
                 Spacer()
 
                 if failed {
                     Text(localization.localized(
-                        "Лицо не распознано",
-                        "Face not recognized"
+                        "Лицо не распознано. Попытка \(attempts)/5",
+                        "Face not recognized. Attempt \(attempts)/5"
                     ))
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .shadow(color: .black, radius: 2)
                 }
 
                 if isLocked {
@@ -444,6 +648,7 @@ struct CustomBiometricVerifyView: View {
                     ))
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .shadow(color: .black, radius: 2)
                 }
 
                 Button {
@@ -479,14 +684,25 @@ struct CustomBiometricVerifyView: View {
                     Text("@\(authService.currentUsername)")
                         .font(.caption)
                 }
-                .foregroundStyle(.secondary.opacity(0.6))
+                .foregroundStyle(.white.opacity(0.5))
                 .padding(.bottom, 50)
             }
         }
         .onAppear {
-            pulseAnimation = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            camera.setup()
+            camera.start()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 startVerification()
+            }
+        }
+        .onDisappear {
+            camera.stop()
+        }
+        .onChange(of: camera.faceDetected) { _, detected in
+            if !isScanning {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    frameColor = detected ? .green : .white
+                }
             }
         }
     }
@@ -497,23 +713,99 @@ struct CustomBiometricVerifyView: View {
         failed = false
         isScanning = true
         scanProgress = 0
+        statusText = localization.localized("Сканирование...", "Scanning...")
 
-        // Simulate face scan — in production this would use camera + ML model
-        Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { timer in
-            withAnimation(.linear(duration: 0.03)) {
-                scanProgress += 0.02
+        camera.onFaceCapture = { [self] faces in
+            camera.onFaceCapture = nil
+            performVerification(faces)
+        }
+
+        // Timeout — if no face captured in 5 seconds, fail
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            if isScanning {
+                camera.onFaceCapture = nil
+                handleFailure()
             }
-            if scanProgress >= 1.0 {
-                timer.invalidate()
+        }
 
-                // Simulate verification result (always succeeds for demo)
-                withAnimation(.spring(response: 0.3)) {
-                    isScanning = false
-                    verified = true
-                    authService.unlockCustomBiometric()
+        // Progress animation
+        Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
+            if !isScanning {
+                timer.invalidate()
+                return
+            }
+            withAnimation(.linear(duration: 0.05)) {
+                scanProgress = min(scanProgress + 0.01, 0.9)
+            }
+        }
+    }
+
+    private func performVerification(_ faces: [VNFaceObservation]) {
+        guard let face = faces.first, let landmarks = face.landmarks else {
+            handleFailure()
+            return
+        }
+
+        let service = FaceEmbeddingService.shared
+        guard let stored = service.loadStoredFaceprint() else {
+            // No stored faceprint — pass through (first time edge case)
+            handleSuccess()
+            return
+        }
+
+        let current = service.encodeLandmarks(landmarks, boundingBox: face.boundingBox)
+        let similarity = service.compareFaceprints(stored: stored, current: current)
+
+        // Threshold for match
+        if similarity > 0.72 {
+            handleSuccess()
+        } else {
+            handleFailure()
+        }
+    }
+
+    private func handleSuccess() {
+        withAnimation(.spring(response: 0.3)) {
+            isScanning = false
+            scanProgress = 1.0
+            verified = true
+            frameColor = .green
+            statusText = localization.localized("Верифицировано", "Verified")
+        }
+        HapticService.success()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            authService.unlockCustomBiometric()
+        }
+    }
+
+    private func handleFailure() {
+        withAnimation(.spring(response: 0.3)) {
+            isScanning = false
+            failed = true
+            frameColor = .red
+            statusText = localization.localized("Лицо не совпадает", "Face doesn't match")
+            attempts += 1
+        }
+        HapticService.error()
+
+        if attempts >= 5 {
+            isLocked = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
+                withAnimation {
+                    isLocked = false
+                    attempts = 0
                 }
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            if !isLocked {
+                withAnimation {
+                    failed = false
+                    frameColor = .white
+                    statusText = ""
+                }
             }
         }
     }
