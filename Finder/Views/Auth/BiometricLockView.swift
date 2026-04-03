@@ -94,36 +94,62 @@ struct BiometricLockView: View {
                     .foregroundStyle(.red)
                 }
 
-                // Verify button
-                Button {
-                    authenticateBiometric()
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: BiometricService.shared.biometricIcon)
-                            .font(.system(size: 20))
+                if BiometricService.shared.isAvailable {
+                    // Verify button
+                    Button {
+                        authenticateBiometric()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: BiometricService.shared.biometricIcon)
+                                .font(.system(size: 20))
+                            Text(localization.localized(
+                                "Подтвердить \(BiometricService.shared.biometricName)",
+                                "Verify with \(BiometricService.shared.biometricName)"
+                            ))
+                            .font(.headline)
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: isLocked ? [.gray, .gray] : [.blue, .cyan],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                        )
+                        .shadow(color: isLocked ? .clear : .blue.opacity(0.3), radius: 10, y: 5)
+                    }
+                    .disabled(isLocked)
+                    .padding(.horizontal, 32)
+                } else {
+                    // Biometric not available on this device
+                    VStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 28))
+                            .foregroundStyle(.orange)
+
                         Text(localization.localized(
-                            "Подтвердить \(BiometricService.shared.biometricName)",
-                            "Verify with \(BiometricService.shared.biometricName)"
+                            "Биометрия недоступна",
+                            "Biometrics Unavailable"
                         ))
                         .font(.headline)
+                        .foregroundStyle(.orange)
+
+                        Text(localization.localized(
+                            "Этот аккаунт защищён биометрией, но на данном устройстве она не настроена. Настройте Face ID или Touch ID в системных настройках iPhone.",
+                            "This account is protected by biometrics, but it's not set up on this device. Set up Face ID or Touch ID in iPhone system settings."
+                        ))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
                     }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: isLocked ? [.gray, .gray] : [.blue, .cyan],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                    )
-                    .shadow(color: isLocked ? .clear : .blue.opacity(0.3), radius: 10, y: 5)
+                    .padding(.horizontal, 32)
                 }
-                .disabled(isLocked)
-                .padding(.horizontal, 32)
 
                 // Account info
                 HStack(spacing: 6) {
@@ -142,8 +168,10 @@ struct BiometricLockView: View {
             }
             pulseAnimation = true
             // Auto-trigger biometric on appear
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                authenticateBiometric()
+            if BiometricService.shared.isAvailable {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    authenticateBiometric()
+                }
             }
         }
     }

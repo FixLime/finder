@@ -121,9 +121,7 @@ struct PrivacySettingsView: View {
                 }
 
                 // Привязка биометрии
-                if biometricService.isAvailable {
-                    biometricBindingSection
-                }
+                biometricBindingSection
 
                 // Автоудаление
                 privacySection(
@@ -332,21 +330,21 @@ struct PrivacySettingsView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(Color.indigo.opacity(0.15))
                             .frame(width: 32, height: 32)
-                        Image(systemName: biometricService.biometricIcon)
+                        Image(systemName: biometricService.isAvailable ? biometricService.biometricIcon : "faceid")
                             .font(.system(size: 14))
                             .foregroundStyle(.indigo)
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(localization.localized(
-                            "Привязать \(biometricService.biometricName)",
-                            "Bind \(biometricService.biometricName)"
+                            "Привязать биометрию",
+                            "Bind Biometrics"
                         ))
                         .font(.subheadline)
 
                         Text(localization.localized(
-                            "Вход только с вашей биометрией",
-                            "Login only with your biometrics"
+                            "Вход только с вашей биометрией на каждом устройстве",
+                            "Login only with your biometrics on every device"
                         ))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -354,33 +352,63 @@ struct PrivacySettingsView: View {
 
                     Spacer()
 
-                    Toggle("", isOn: Binding(
-                        get: { authService.biometricBindingEnabled },
-                        set: { newValue in
-                            if newValue {
-                                showBiometricBindingConfirm = true
-                            } else {
-                                showBiometricDisableAuth = true
+                    if biometricService.isAvailable {
+                        Toggle("", isOn: Binding(
+                            get: { authService.biometricBindingEnabled },
+                            set: { newValue in
+                                if newValue {
+                                    showBiometricBindingConfirm = true
+                                } else {
+                                    showBiometricDisableAuth = true
+                                }
                             }
-                        }
-                    ))
-                    .labelsHidden()
-                    .tint(.indigo)
+                        ))
+                        .labelsHidden()
+                        .tint(.indigo)
+                    }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
 
-                if authService.biometricBindingEnabled {
+                if !biometricService.isAvailable && !authService.biometricBindingEnabled {
                     HStack(spacing: 6) {
-                        Image(systemName: "checkmark.shield.fill")
+                        Image(systemName: "exclamationmark.triangle.fill")
                             .font(.caption)
                         Text(localization.localized(
-                            "Аккаунт защищён биометрией. Без \(biometricService.biometricName) вход невозможен.",
-                            "Account protected by biometrics. Login without \(biometricService.biometricName) is impossible."
+                            "Биометрия недоступна на этом устройстве. Настройте Face ID или Touch ID в системных настройках.",
+                            "Biometrics unavailable on this device. Set up Face ID or Touch ID in system settings."
                         ))
                         .font(.caption)
                     }
-                    .foregroundStyle(.indigo)
+                    .foregroundStyle(.orange)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.08))
+                    .cornerRadius(10)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
+                }
+
+                if authService.biometricBindingEnabled {
+                    VStack(spacing: 8) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.shield.fill")
+                                .font(.caption)
+                            Text(localization.localized(
+                                "Биометрия привязана к аккаунту",
+                                "Biometrics bound to account"
+                            ))
+                            .font(.caption.bold())
+                        }
+                        .foregroundStyle(.indigo)
+
+                        Text(localization.localized(
+                            "На каждом устройстве при входе потребуется биометрическая верификация. Без неё доступ к аккаунту невозможен даже с правильным PIN-кодом.",
+                            "Biometric verification will be required on every device at login. Account access is impossible without it, even with the correct PIN."
+                        ))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.indigo.opacity(0.08))
