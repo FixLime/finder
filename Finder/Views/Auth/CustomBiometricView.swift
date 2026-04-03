@@ -162,7 +162,6 @@ class FaceCameraController: NSObject, ObservableObject, AVCaptureVideoDataOutput
         }
 
         if let connection = videoOutput.connection(with: .video) {
-            connection.videoRotationAngle = 90
             connection.isVideoMirrored = true
         }
     }
@@ -218,6 +217,9 @@ struct FaceCameraPreview: UIViewRepresentable {
 
         let previewLayer = AVCaptureVideoPreviewLayer(session: cameraController.captureSession)
         previewLayer.videoGravity = .resizeAspectFill
+        if previewLayer.connection?.isVideoRotationAngleSupported(90) == true {
+            previewLayer.connection?.videoRotationAngle = 90
+        }
         view.layer.addSublayer(previewLayer)
         cameraController.previewLayer = previewLayer
 
@@ -377,44 +379,42 @@ struct CustomBiometricSetupView: View {
                 .ignoresSafeArea()
 
             // Dark overlay with face cutout
-            Color.black.opacity(0.5)
-                .ignoresSafeArea()
-                .mask {
-                    ZStack {
-                        Color.white
-                        Ellipse()
-                            .frame(width: 260, height: 340)
-                            .blendMode(.destinationOut)
+            GeometryReader { geo in
+                let ovalW: CGFloat = geo.size.width * 0.6
+                let ovalH: CGFloat = ovalW * 1.35
+                let ovalY: CGFloat = geo.size.height * 0.38
+
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                    .mask {
+                        ZStack {
+                            Color.white
+                            Ellipse()
+                                .frame(width: ovalW, height: ovalH)
+                                .position(x: geo.size.width / 2, y: ovalY)
+                                .blendMode(.destinationOut)
+                        }
+                        .compositingGroup()
                     }
-                    .compositingGroup()
-                }
 
-            VStack {
-                Spacer()
-                    .frame(height: 60)
+                // Face frame ellipse
+                Ellipse()
+                    .stroke(frameColor, style: StrokeStyle(lineWidth: 3))
+                    .frame(width: ovalW + 4, height: ovalH + 4)
+                    .position(x: geo.size.width / 2, y: ovalY)
 
-                // Face frame
-                ZStack {
-                    // Outer ellipse
-                    Ellipse()
-                        .stroke(frameColor, style: StrokeStyle(lineWidth: 3))
-                        .frame(width: 264, height: 344)
+                // Progress ring
+                Circle()
+                    .trim(from: 0, to: scanProgress)
+                    .stroke(
+                        LinearGradient(colors: [.purple, .green], startPoint: .leading, endPoint: .trailing),
+                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                    )
+                    .frame(width: ovalW + 20, height: ovalW + 20)
+                    .rotationEffect(.degrees(-90))
+                    .position(x: geo.size.width / 2, y: ovalY)
 
-                    // Progress ring
-                    Circle()
-                        .trim(from: 0, to: scanProgress)
-                        .stroke(
-                            LinearGradient(colors: [.purple, .green], startPoint: .leading, endPoint: .trailing),
-                            style: StrokeStyle(lineWidth: 4, lineCap: .round)
-                        )
-                        .frame(width: 280, height: 280)
-                        .rotationEffect(.degrees(-90))
-                }
-
-                Spacer()
-                    .frame(height: 30)
-
-                // Status
+                // Status text
                 VStack(spacing: 8) {
                     Text(statusText.isEmpty
                          ? localization.localized("Поместите лицо в рамку", "Place your face in the frame")
@@ -428,8 +428,7 @@ struct CustomBiometricSetupView: View {
                         .foregroundColor(frameColor)
                         .shadow(color: .black, radius: 4)
                 }
-
-                Spacer()
+                .position(x: geo.size.width / 2, y: ovalY + ovalH / 2 + 50)
             }
         }
         .onAppear {
@@ -573,45 +572,44 @@ struct CustomBiometricVerifyView: View {
                 .ignoresSafeArea()
 
             // Dark overlay with cutout
-            Color.black.opacity(0.6)
-                .ignoresSafeArea()
-                .mask {
-                    ZStack {
-                        Color.white
-                        Ellipse()
-                            .frame(width: 220, height: 290)
-                            .blendMode(.destinationOut)
+            GeometryReader { geo in
+                let ovalW: CGFloat = geo.size.width * 0.55
+                let ovalH: CGFloat = ovalW * 1.35
+                let ovalY: CGFloat = geo.size.height * 0.35
+
+                Color.black.opacity(0.6)
+                    .ignoresSafeArea()
+                    .mask {
+                        ZStack {
+                            Color.white
+                            Ellipse()
+                                .frame(width: ovalW, height: ovalH)
+                                .position(x: geo.size.width / 2, y: ovalY)
+                                .blendMode(.destinationOut)
+                        }
+                        .compositingGroup()
                     }
-                    .compositingGroup()
+
+                Ellipse()
+                    .stroke(frameColor, style: StrokeStyle(lineWidth: 3))
+                    .frame(width: ovalW + 4, height: ovalH + 4)
+                    .position(x: geo.size.width / 2, y: ovalY)
+
+                if isScanning {
+                    Circle()
+                        .trim(from: 0, to: scanProgress)
+                        .stroke(Color.purple, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+                        .frame(width: ovalW + 20, height: ovalW + 20)
+                        .rotationEffect(.degrees(-90))
+                        .position(x: geo.size.width / 2, y: ovalY)
                 }
 
-            VStack(spacing: 20) {
-                Spacer()
-                    .frame(height: 80)
-
-                // Face frame
-                ZStack {
-                    Ellipse()
-                        .stroke(frameColor, style: StrokeStyle(lineWidth: 3))
-                        .frame(width: 224, height: 294)
-
-                    if isScanning {
-                        Circle()
-                            .trim(from: 0, to: scanProgress)
-                            .stroke(Color.purple, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
-                            .frame(width: 240, height: 240)
-                            .rotationEffect(.degrees(-90))
-                    }
-
-                    if !camera.faceDetected && !isScanning {
-                        Image(systemName: "person.viewfinder")
-                            .font(.system(size: 60))
-                            .foregroundColor(.white.opacity(0.3))
-                    }
+                if !camera.faceDetected && !isScanning {
+                    Image(systemName: "person.viewfinder")
+                        .font(.system(size: 50))
+                        .foregroundColor(.white.opacity(0.3))
+                        .position(x: geo.size.width / 2, y: ovalY)
                 }
-
-                Spacer()
-                    .frame(height: 20)
 
                 VStack(spacing: 8) {
                     Text(localization.localized("Верификация лица", "Face Verification"))
@@ -626,9 +624,11 @@ struct CustomBiometricVerifyView: View {
                         .foregroundColor(.white.opacity(0.8))
                         .shadow(color: .black, radius: 4)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
                 }
+                .position(x: geo.size.width / 2, y: ovalY + ovalH / 2 + 50)
+            }
 
+            VStack {
                 Spacer()
 
                 if failed {
