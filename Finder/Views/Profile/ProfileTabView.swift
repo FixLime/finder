@@ -43,6 +43,11 @@ struct ProfileTabView: View {
                         }
 
                         HStack(spacing: 4) {
+                            if AdminService.shared.isUntrusted(authService.currentUsername) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(.orange)
+                            }
                             Text(authService.currentDisplayName)
                                 .font(.title2.bold())
                             if AdminService.shared.isVerified(authService.currentUsername) {

@@ -329,6 +329,7 @@ class NetworkService: ObservableObject {
             isOnline: server.is_online ?? false,
             lastSeen: nil,
             isVerified: server.is_verified ?? false,
+            isUntrusted: false,
             isBanned: server.is_banned ?? false,
             isDeleted: server.is_deleted ?? false,
             finderID: server.finder_id ?? "FID-\(server.id.prefix(8).uppercased())",

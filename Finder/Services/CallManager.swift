@@ -160,6 +160,7 @@ class CallManager: ObservableObject {
             isOnline: true,
             lastSeen: nil,
             isVerified: false,
+            isUntrusted: false,
             isBanned: false,
             isDeleted: false,
             finderID: "",

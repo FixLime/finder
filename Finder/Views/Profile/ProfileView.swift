@@ -52,6 +52,11 @@ struct UserProfileView: View {
                                 .font(.system(size: 22))
                                 .foregroundStyle(.blue)
                                 .offset(x: -40, y: 40)
+                        } else if user.isUntrusted || AdminService.shared.isUntrusted(user.username) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 22))
+                                .foregroundStyle(.orange)
+                                .offset(x: -40, y: 40)
                         }
                     }
                     .scaleEffect(appear ? 1 : 0.5)
@@ -60,12 +65,36 @@ struct UserProfileView: View {
 
                     // Name & Username
                     VStack(spacing: 6) {
-                        Text(user.displayName)
-                            .font(.title.bold())
+                        HStack(spacing: 6) {
+                            if user.isUntrusted || AdminService.shared.isUntrusted(user.username) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundStyle(.orange)
+                            }
+                            Text(user.displayName)
+                                .font(.title.bold())
+                        }
 
                         Text("@\(user.username)")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+
+                        if user.isUntrusted || AdminService.shared.isUntrusted(user.username) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.caption2)
+                                Text(localization.localized(
+                                    "Недоверенный пользователь — может обманывать и вводить в заблуждение",
+                                    "Untrusted user — may deceive and mislead"
+                                ))
+                                .font(.caption2)
+                            }
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.orange.opacity(0.1))
+                            .cornerRadius(8)
+                        }
 
                         if user.isOnline {
                             Text(localization.online)

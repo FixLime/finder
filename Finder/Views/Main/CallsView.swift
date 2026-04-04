@@ -94,6 +94,11 @@ struct CallRow: View {
                             .font(.system(size: 12))
                             .foregroundStyle(.blue)
                     }
+                    if call.user.isUntrusted || AdminService.shared.isUntrusted(call.user.username) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.orange)
+                    }
                 }
 
                 HStack(spacing: 4) {

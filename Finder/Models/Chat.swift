@@ -55,6 +55,14 @@ struct Chat: Codable, Identifiable, Hashable {
         }
         return participants.contains { $0.isVerified || AdminService.shared.isVerified($0.username) }
     }
+
+    var isUntrustedChat: Bool {
+        if isNotes || isSupport { return false }
+        if let other = otherUser {
+            return other.isUntrusted || AdminService.shared.isUntrusted(other.username)
+        }
+        return false
+    }
 }
 
 struct Note: Codable, Identifiable, Hashable {

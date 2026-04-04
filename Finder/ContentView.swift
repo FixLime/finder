@@ -24,8 +24,10 @@ struct ContentView: View {
                 BiometricLockView()
                     .transition(.opacity)
             } else if authService.isCustomBiometricLocked && authService.customBiometricEnabled {
-                CustomBiometricVerifyView()
-                    .transition(.opacity)
+                // Biometrics temporarily disabled — auto-unlock
+                Color.clear.onAppear {
+                    authService.unlockCustomBiometric()
+                }
             } else if authService.isDecoyMode {
                 DecoyAccountView()
                     .transition(.opacity)

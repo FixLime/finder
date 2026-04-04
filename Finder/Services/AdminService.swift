@@ -13,10 +13,13 @@ class AdminService: ObservableObject {
     @AppStorage("bannedUsernames") private var bannedUsernamesRaw: String = ""
     // Список удалённых юзернеймов
     @AppStorage("deletedUsernames") private var deletedUsernamesRaw: String = ""
+    // Список недоверенных юзернеймов
+    @AppStorage("untrustedUsernames") private var untrustedUsernamesRaw: String = ""
 
     @Published var verifiedUsernames: Set<String> = []
     @Published var bannedUsernames: Set<String> = []
     @Published var deletedUsernames: Set<String> = []
+    @Published var untrustedUsernames: Set<String> = []
 
     private init() {
         loadData()
@@ -26,12 +29,14 @@ class AdminService: ObservableObject {
         verifiedUsernames = Set(verifiedUsernamesRaw.split(separator: ",").map { String($0) })
         bannedUsernames = Set(bannedUsernamesRaw.split(separator: ",").map { String($0) })
         deletedUsernames = Set(deletedUsernamesRaw.split(separator: ",").map { String($0) })
+        untrustedUsernames = Set(untrustedUsernamesRaw.split(separator: ",").map { String($0) })
     }
 
     private func saveData() {
         verifiedUsernamesRaw = verifiedUsernames.joined(separator: ",")
         bannedUsernamesRaw = bannedUsernames.joined(separator: ",")
         deletedUsernamesRaw = deletedUsernames.joined(separator: ",")
+        untrustedUsernamesRaw = untrustedUsernames.joined(separator: ",")
         objectWillChange.send()
     }
 
@@ -119,10 +124,29 @@ class AdminService: ObservableObject {
         deletedUsernames.contains(username.lowercased().trimmingCharacters(in: .whitespaces))
     }
 
+    // Недоверенный
+    func untrustUser(_ username: String) {
+        let u = username.lowercased().trimmingCharacters(in: .whitespaces)
+        guard !u.isEmpty else { return }
+        untrustedUsernames.insert(u)
+        saveData()
+    }
+
+    func trustUser(_ username: String) {
+        let u = username.lowercased().trimmingCharacters(in: .whitespaces)
+        untrustedUsernames.remove(u)
+        saveData()
+    }
+
+    func isUntrusted(_ username: String) -> Bool {
+        untrustedUsernames.contains(username.lowercased().trimmingCharacters(in: .whitespaces))
+    }
+
     func resetAll() {
         verifiedUsernames.removeAll()
         bannedUsernames.removeAll()
         deletedUsernames.removeAll()
+        untrustedUsernames.removeAll()
         saveData()
     }
 }

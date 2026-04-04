@@ -360,8 +360,15 @@ struct ChatPreview: View {
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(chat.isNotes ? localization.notes : chat.displayName)
-                        .font(.subheadline.bold())
+                    HStack(spacing: 4) {
+                        if chat.isUntrustedChat {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.orange)
+                        }
+                        Text(chat.isNotes ? localization.notes : chat.displayName)
+                            .font(.subheadline.bold())
+                    }
                     if let user = chat.otherUser, user.isOnline {
                         Text(localization.online)
                             .font(.caption)
@@ -469,11 +476,22 @@ struct ChatRow: View {
                         .font(.system(size: 14))
                         .foregroundStyle(.blue)
                         .offset(x: -20, y: 20)
+                } else if chat.isUntrustedChat {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.orange)
+                        .offset(x: -20, y: 20)
                 }
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
+                    if chat.isUntrustedChat {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.orange)
+                    }
+
                     Text(chat.isNotes
                          ? localization.notes
                          : chat.displayName)

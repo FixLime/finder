@@ -759,9 +759,16 @@ struct MessageBubble: View {
             VStack(alignment: message.isFromCurrentUser ? .trailing : .leading, spacing: 2) {
                 if chat.isGroup && !message.isFromCurrentUser {
                     if let sender = chat.participants.first(where: { $0.id == message.senderId }) {
-                        Text(sender.displayName)
-                            .font(.caption2.bold())
-                            .foregroundStyle(.blue)
+                        HStack(spacing: 3) {
+                            if sender.isUntrusted || AdminService.shared.isUntrusted(sender.username) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.orange)
+                            }
+                            Text(sender.displayName)
+                                .font(.caption2.bold())
+                                .foregroundStyle(.blue)
+                        }
                     }
                 }
 

@@ -10,6 +10,7 @@ struct FinderUser: Codable, Identifiable, Hashable {
     var isOnline: Bool
     var lastSeen: Date?
     var isVerified: Bool
+    var isUntrusted: Bool
     var isBanned: Bool
     var isDeleted: Bool
     var finderID: String
@@ -33,6 +34,7 @@ struct FinderUser: Codable, Identifiable, Hashable {
             isOnline: true,
             lastSeen: nil,
             isVerified: true,
+            isUntrusted: false,
             isBanned: false,
             isDeleted: false,
             finderID: "FID-\(UUID().uuidString.prefix(8).uppercased())",

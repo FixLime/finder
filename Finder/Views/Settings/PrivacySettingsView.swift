@@ -436,94 +436,61 @@ struct PrivacySettingsView: View {
             iconColor: .purple
         ) {
             VStack(spacing: 0) {
-                Button {
-                    if authService.customBiometricEnabled {
-                        // Disable
-                        withAnimation {
-                            authService.customBiometricEnabled = false
-                        }
-                    } else {
-                        showCustomBiometricSetup = true
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.purple.opacity(0.15))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "person.viewfinder")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.purple.opacity(0.5))
                     }
-                } label: {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.purple.opacity(0.15))
-                                .frame(width: 32, height: 32)
-                            Image(systemName: "person.viewfinder")
-                                .font(.system(size: 14))
-                                .foregroundStyle(.purple)
-                        }
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(localization.localized(
-                                "Биометрия по камере",
-                                "Camera Biometrics"
-                            ))
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(localization.localized(
+                            "Биометрия по камере",
+                            "Camera Biometrics"
+                        ))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
 
-                            Text(localization.localized(
-                                "Сканирование лица отдельно от Face ID",
-                                "Face scanning separate from Face ID"
-                            ))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        if authService.customBiometricEnabled {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                        }
-
-                        Image(systemName: "chevron.right")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                        Text(localization.localized(
+                            "Сканирование лица отдельно от Face ID",
+                            "Face scanning separate from Face ID"
+                        ))
+                        .font(.caption)
+                        .foregroundStyle(.secondary.opacity(0.7))
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
+
+                    Spacer()
+
+                    Text(localization.localized("Скоро", "Soon"))
+                        .font(.caption2.bold())
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.purple.opacity(0.5)))
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
 
-                // Warning about camera quality
+                // Improving notice
                 HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
+                    Image(systemName: "wrench.and.screwdriver.fill")
                         .font(.caption2)
                     Text(localization.localized(
-                        "Не рекомендуется, если камера на другом устройстве заметно ниже качеством",
-                        "Not recommended if the other device's camera is significantly lower quality"
+                        "В данный момент мы улучшаем биометрию. Функция будет доступна в ближайшем обновлении.",
+                        "We're currently improving biometrics. This feature will be available in an upcoming update."
                     ))
                     .font(.caption2)
                 }
-                .foregroundStyle(.orange)
+                .foregroundStyle(.purple)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.orange.opacity(0.06))
+                .background(Color.purple.opacity(0.06))
                 .cornerRadius(10)
                 .padding(.horizontal, 10)
                 .padding(.bottom, 10)
-
-                if authService.customBiometricEnabled {
-                    HStack(spacing: 6) {
-                        Image(systemName: "checkmark.shield.fill")
-                            .font(.caption)
-                        Text(localization.localized(
-                            "Биометрия по камере активна. Сканирование лица требуется при каждом входе.",
-                            "Camera biometrics active. Face scanning required on every login."
-                        ))
-                        .font(.caption)
-                    }
-                    .foregroundStyle(.purple)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.purple.opacity(0.08))
-                    .cornerRadius(10)
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 10)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
             }
         }
     }

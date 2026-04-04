@@ -138,6 +138,7 @@ class ChatService: ObservableObject {
             isOnline: true,
             lastSeen: nil,
             isVerified: true,
+            isUntrusted: false,
             isBanned: false,
             isDeleted: false,
             finderID: "FID-SUPPORT",
@@ -463,9 +464,9 @@ class ChatService: ObservableObject {
     // MARK: - Demo Data (3 тестовых: обычный, удалённый, забаненный)
 
     static let demoUsers: [FinderUser] = [
-        FinderUser(id: UUID(), username: "test_user", displayName: "Test User", avatarIcon: "person.fill", avatarColor: .blue, statusText: "Тестирую Finder", isOnline: true, lastSeen: nil, isVerified: false, isBanned: false, isDeleted: false, finderID: "FID-TEST0001", joinDate: Date().addingTimeInterval(-604800), privacySettings: .default),
-        FinderUser(id: UUID(), username: "deleted_user", displayName: "Deleted Account", avatarIcon: "person.fill", avatarColor: .gray, statusText: "", isOnline: false, lastSeen: Date().addingTimeInterval(-604800), isVerified: false, isBanned: false, isDeleted: true, finderID: "FID-DEL00001", joinDate: Date().addingTimeInterval(-432000), privacySettings: .default),
-        FinderUser(id: UUID(), username: "banned_user", displayName: "Banned Account", avatarIcon: "person.fill", avatarColor: .gray, statusText: "", isOnline: false, lastSeen: Date().addingTimeInterval(-1209600), isVerified: false, isBanned: true, isDeleted: false, finderID: "FID-BAN00001", joinDate: Date().addingTimeInterval(-864000), privacySettings: .default)
+        FinderUser(id: UUID(), username: "test_user", displayName: "Test User", avatarIcon: "person.fill", avatarColor: .blue, statusText: "Тестирую Finder", isOnline: true, lastSeen: nil, isVerified: false, isUntrusted: false, isBanned: false, isDeleted: false, finderID: "FID-TEST0001", joinDate: Date().addingTimeInterval(-604800), privacySettings: .default),
+        FinderUser(id: UUID(), username: "deleted_user", displayName: "Deleted Account", avatarIcon: "person.fill", avatarColor: .gray, statusText: "", isOnline: false, lastSeen: Date().addingTimeInterval(-604800), isVerified: false, isUntrusted: false, isBanned: false, isDeleted: true, finderID: "FID-DEL00001", joinDate: Date().addingTimeInterval(-432000), privacySettings: .default),
+        FinderUser(id: UUID(), username: "banned_user", displayName: "Banned Account", avatarIcon: "person.fill", avatarColor: .gray, statusText: "", isOnline: false, lastSeen: Date().addingTimeInterval(-1209600), isVerified: false, isUntrusted: false, isBanned: true, isDeleted: false, finderID: "FID-BAN00001", joinDate: Date().addingTimeInterval(-864000), privacySettings: .default)
     ]
 
     static func generateDemoMessages(for user: FinderUser, chatId: UUID, currentUserId: UUID) -> [Message] {

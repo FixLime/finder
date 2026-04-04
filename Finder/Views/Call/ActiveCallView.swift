@@ -120,6 +120,11 @@ struct ActiveCallView: View {
                                     .font(.system(size: 16))
                                     .foregroundStyle(.blue)
                             }
+                            if call.user.isUntrusted || AdminService.shared.isUntrusted(call.user.username) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(.orange)
+                            }
                         }
 
                         // Status

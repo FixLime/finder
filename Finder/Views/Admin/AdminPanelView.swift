@@ -11,7 +11,7 @@ struct AdminPanelView: View {
     @State private var selectedAction: AdminAction = .verify
 
     enum AdminAction: String, CaseIterable {
-        case verify, unverify, ban, unban, deleteAccount, restore
+        case verify, unverify, ban, unban, deleteAccount, restore, untrust, trust
 
         var icon: String {
             switch self {
@@ -21,6 +21,8 @@ struct AdminPanelView: View {
             case .unban: return "arrow.uturn.backward"
             case .deleteAccount: return "person.crop.circle.badge.xmark"
             case .restore: return "person.crop.circle.badge.checkmark"
+            case .untrust: return "exclamationmark.triangle.fill"
+            case .trust: return "checkmark.shield.fill"
             }
         }
 
@@ -32,6 +34,8 @@ struct AdminPanelView: View {
             case .unban: return .green
             case .deleteAccount: return .red
             case .restore: return .green
+            case .untrust: return .orange
+            case .trust: return .green
             }
         }
 
@@ -43,6 +47,8 @@ struct AdminPanelView: View {
             case .unban: return loc.unbanUser
             case .deleteAccount: return loc.deleteAccount
             case .restore: return loc.localized("Восстановить", "Restore")
+            case .untrust: return loc.localized("Недоверенный", "Untrusted")
+            case .trust: return loc.localized("Доверенный", "Trusted")
             }
         }
     }
@@ -196,6 +202,16 @@ struct AdminPanelView: View {
                     )
                 }
 
+                // Untrusted users list
+                if !adminService.untrustedUsernames.isEmpty {
+                    adminListSection(
+                        title: localization.localized("Недоверенные", "Untrusted"),
+                        icon: "exclamationmark.triangle.fill",
+                        iconColor: .orange,
+                        items: Array(adminService.untrustedUsernames).sorted()
+                    )
+                }
+
                 // Deleted users list
                 if !adminService.deletedUsernames.isEmpty {
                     adminListSection(
@@ -286,6 +302,16 @@ struct AdminPanelView: View {
                 adminService.restoreUserAccount(u)
                 actionResult = localization.localized("Аккаунт @\(u) восстановлен", "Account @\(u) restored")
                 updateDemoUser(u) { $0.isDeleted = false }
+
+            case .untrust:
+                adminService.untrustUser(u)
+                actionResult = localization.localized("Пользователь @\(u) помечен как недоверенный", "User @\(u) marked as untrusted")
+                updateDemoUser(u) { $0.isUntrusted = true }
+
+            case .trust:
+                adminService.trustUser(u)
+                actionResult = localization.localized("Пользователь @\(u) теперь доверенный", "User @\(u) is now trusted")
+                updateDemoUser(u) { $0.isUntrusted = false }
             }
 
             showResult = true

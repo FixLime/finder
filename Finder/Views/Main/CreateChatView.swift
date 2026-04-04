@@ -136,6 +136,11 @@ struct CreateChatView: View {
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack(spacing: 4) {
+                                        if user.isUntrusted || AdminService.shared.isUntrusted(user.username) {
+                                            Image(systemName: "exclamationmark.triangle.fill")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(.orange)
+                                        }
                                         Text(user.displayName)
                                             .font(.subheadline.bold())
                                             .foregroundStyle(.primary)
