@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import AVFoundation
+import UIKit
 
 struct ChatDetailView: View {
     @Binding var chat: Chat
@@ -15,6 +16,7 @@ struct ChatDetailView: View {
     @State private var showFilePicker = false
     @State private var showActiveCall = false
     @State private var showVideoRecorder = false
+    @State private var showScreenshotAlert = false
     @State private var selectedPhoto: PhotosPickerItem?
     @StateObject private var audioRecorder = AudioRecorderService()
     @StateObject private var audioPlayer = AudioPlayerService()
@@ -238,6 +240,20 @@ struct ChatDetailView: View {
                 sendVideoCircle(url: url)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.userDidTakeScreenshotNotification)) { _ in
+            handleScreenshot()
+        }
+        .alert(
+            localization.localized("Скриншот обнаружен", "Screenshot Detected"),
+            isPresented: $showScreenshotAlert
+        ) {
+            Button(localization.localized("Понял", "Got it"), role: .cancel) { }
+        } message: {
+            Text(localization.localized(
+                "Если вы хотите конфиденциальности — соблюдайте её сами. Не делайте скриншоты переписок. Собеседник уведомлён.",
+                "If you want privacy — respect it yourself. Don't screenshot conversations. The other person has been notified."
+            ))
+        }
     }
 
     // MARK: - Voice Recording Bar
@@ -293,6 +309,24 @@ struct ChatDetailView: View {
         messageText = ""
         replyingTo = nil
         chatService.sendMessage(to: chat.id, text: text)
+    }
+
+    private func handleScreenshot() {
+        guard !chat.isNotes else { return }
+
+        HapticService.warning()
+        showScreenshotAlert = true
+
+        // Add system message to chat notifying about screenshot
+        let currentName = AuthService.shared.currentDisplayName
+        let systemText = localization.localized(
+            "📸 \(currentName) сделал(а) скриншот переписки",
+            "📸 \(currentName) took a screenshot of the chat"
+        )
+        let msg = Message.system(systemText, chatId: chat.id)
+        if let index = chatService.chats.firstIndex(where: { $0.id == chat.id }) {
+            chatService.chats[index].messages.append(msg)
+        }
     }
 
     private func sendVoiceMessage(url: URL) {
