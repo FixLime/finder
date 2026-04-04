@@ -3,6 +3,7 @@ import SwiftUI
 struct AdminPanelView: View {
     @EnvironmentObject var localization: LocalizationManager
     @EnvironmentObject var chatService: ChatService
+    @EnvironmentObject var themeManager: ThemeManager
     @ObservedObject var adminService = AdminService.shared
     @ObservedObject var reportService = ReportService.shared
 
@@ -298,6 +299,7 @@ struct AdminPanelView: View {
                         showReportDetail = false
                     }
                 )
+                .environmentObject(themeManager)
             }
         }
     }

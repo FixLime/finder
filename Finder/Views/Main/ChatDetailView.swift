@@ -16,67 +16,42 @@ struct ChatDetailView: View {
     @State private var showFilePicker = false
     @State private var showActiveCall = false
     @State private var showVideoRecorder = false
-    @State private var showScreenshotAlert = false
+    @State private var showScreenshotPopup = false
     @State private var selectedPhoto: PhotosPickerItem?
     @StateObject private var audioRecorder = AudioRecorderService()
     @StateObject private var audioPlayer = AudioPlayerService()
 
+    /// Whether the other user has blocked screenshots (and current user is NOT in exceptions)
+    private var isScreenshotBlocked: Bool {
+        // If it's notes or support, no blocking
+        if chat.isNotes || chat.isSupport { return false }
+        // Check our own setting — if we blocked screenshots, it applies
+        let ownBlocked = !UserDefaults.standard.bool(forKey: "privacyAllowScreenshots")
+        if ownBlocked { return true }
+        return false
+    }
+
+    /// Whether current user is in exception list (allowed to screenshot)
+    private var isScreenshotException: Bool {
+        if let other = chat.otherUser {
+            let exceptions = ScreenshotExceptionsService.shared.exceptions
+            return exceptions.contains(other.username.lowercased())
+        }
+        return false
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            // Messages
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 4) {
-                        // Encryption banner
-                        VStack(spacing: 4) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "lock.fill")
-                                    .font(.system(size: 10))
-                                Text(localization.localized(
-                                    "Сообщения защищены сквозным шифрованием.",
-                                    "Messages are end-to-end encrypted."
-                                ))
-                                .font(.system(size: 11))
-                            }
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
+                // Messages
+                ScrollViewReader { proxy in
+                    if isScreenshotBlocked && !isScreenshotException {
+                        ScreenshotGuardView {
+                            chatMessagesContent(proxy: proxy)
                         }
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 10)
-
-                        ForEach(chat.messages.sorted(by: { $0.timestamp < $1.timestamp })) { message in
-                            if message.messageType == .voice {
-                                VoiceMessageBubble(
-                                    message: message,
-                                    audioPlayer: audioPlayer,
-                                    onReply: { replyingTo = message },
-                                    onDelete: { deleteMessage(message) }
-                                )
-                                .id(message.id)
-                            } else {
-                                MessageBubble(
-                                    message: message,
-                                    chat: chat,
-                                    onReply: { replyingTo = message },
-                                    onDelete: { deleteMessage(message) }
-                                )
-                                .id(message.id)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.top, 8)
-                    .padding(.bottom, 8)
-                }
-                .onChange(of: chat.messages.count) { _, _ in
-                    withAnimation(.spring(response: 0.3)) {
-                        proxy.scrollTo(chat.messages.sorted(by: { $0.timestamp < $1.timestamp }).last?.id, anchor: .bottom)
+                    } else {
+                        chatMessagesContent(proxy: proxy)
                     }
                 }
-                .onAppear {
-                    proxy.scrollTo(chat.messages.sorted(by: { $0.timestamp < $1.timestamp }).last?.id, anchor: .bottom)
-                }
-            }
 
             // Reply bar
             if let reply = replyingTo {
@@ -243,16 +218,10 @@ struct ChatDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.userDidTakeScreenshotNotification)) { _ in
             handleScreenshot()
         }
-        .alert(
-            localization.localized("Ой-ой", "Oops"),
-            isPresented: $showScreenshotAlert
-        ) {
-            Button(localization.localized("Ладно-ладно", "Okay okay"), role: .cancel) { }
-        } message: {
-            Text(localization.localized(
-                "Привет! Прости, но собеседник запретил скриншоты. Если хочешь конфиденциальности — соблюдай её и сам, хе-хе",
-                "Hey! Sorry, but the other person doesn't allow screenshots. If you want privacy — respect it yourself too, hehe"
-            ))
+        .overlay {
+            if showScreenshotPopup {
+                screenshotWarningPopup
+            }
         }
     }
 
@@ -311,11 +280,139 @@ struct ChatDetailView: View {
         chatService.sendMessage(to: chat.id, text: text)
     }
 
+    // MARK: - Chat Messages Content (extracted for screenshot guard wrapping)
+
+    private func chatMessagesContent(proxy: ScrollViewProxy) -> some View {
+        ScrollView {
+            LazyVStack(spacing: 4) {
+                // Encryption banner
+                VStack(spacing: 4) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 10))
+                        Text(localization.localized(
+                            "Сообщения защищены сквозным шифрованием.",
+                            "Messages are end-to-end encrypted."
+                        ))
+                        .font(.system(size: 11))
+                    }
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 32)
+                .padding(.vertical, 10)
+
+                ForEach(chat.messages.sorted(by: { $0.timestamp < $1.timestamp })) { message in
+                    if message.messageType == .voice {
+                        VoiceMessageBubble(
+                            message: message,
+                            audioPlayer: audioPlayer,
+                            onReply: { replyingTo = message },
+                            onDelete: { deleteMessage(message) }
+                        )
+                        .id(message.id)
+                    } else {
+                        MessageBubble(
+                            message: message,
+                            chat: chat,
+                            onReply: { replyingTo = message },
+                            onDelete: { deleteMessage(message) }
+                        )
+                        .id(message.id)
+                    }
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+            .padding(.bottom, 8)
+        }
+        .onChange(of: chat.messages.count) { _, _ in
+            withAnimation(.spring(response: 0.3)) {
+                proxy.scrollTo(chat.messages.sorted(by: { $0.timestamp < $1.timestamp }).last?.id, anchor: .bottom)
+            }
+        }
+        .onAppear {
+            proxy.scrollTo(chat.messages.sorted(by: { $0.timestamp < $1.timestamp }).last?.id, anchor: .bottom)
+        }
+    }
+
+    // MARK: - Screenshot Warning Popup
+
+    private var screenshotWarningPopup: some View {
+        ZStack {
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.3)) {
+                        showScreenshotPopup = false
+                    }
+                }
+
+            VStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.orange, .red],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 80, height: 80)
+                        .shadow(color: .orange.opacity(0.4), radius: 12)
+
+                    Image(systemName: "eye.slash.fill")
+                        .font(.system(size: 36))
+                        .foregroundColor(.white)
+                }
+
+                Text(localization.localized("Не-а, хе-хе", "Nope, hehe"))
+                    .font(.title2.bold())
+
+                Text(localization.localized(
+                    "Сам запретил скриншоты — сам не скринь! Уважай конфиденциальность собеседника, как хочешь, чтобы уважали твою",
+                    "You blocked screenshots yourself — don't screenshot others! Respect others' privacy, just as you want yours respected"
+                ))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 8)
+
+                Button {
+                    withAnimation(.spring(response: 0.3)) {
+                        showScreenshotPopup = false
+                    }
+                } label: {
+                    Text(localization.localized("Ладно-ладно", "Okay okay"))
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.orange)
+                        )
+                }
+            }
+            .padding(24)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(.ultraThickMaterial)
+            )
+            .padding(.horizontal, 32)
+            .transition(.scale.combined(with: .opacity))
+        }
+        .transition(.opacity)
+    }
+
     private func handleScreenshot() {
         guard !chat.isNotes else { return }
 
         HapticService.warning()
-        showScreenshotAlert = true
+
+        withAnimation(.spring(response: 0.4)) {
+            showScreenshotPopup = true
+        }
 
         // Add system message to chat notifying about screenshot
         let currentName = AuthService.shared.currentDisplayName

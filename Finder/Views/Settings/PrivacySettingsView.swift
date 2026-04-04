@@ -21,6 +21,9 @@ struct PrivacySettingsView: View {
     @State private var showDecoySetup = false
     @State private var decoyPin = ""
     @State private var showLockedSheet = false
+    @State private var showScreenshotExceptions = false
+    @State private var newExceptionUsername = ""
+    @ObservedObject var screenshotExceptions = ScreenshotExceptionsService.shared
     @State private var showBiometricBindingConfirm = false
     @State private var showBiometricDisableAuth = false
     @State private var showCustomBiometricSetup = false
@@ -94,6 +97,56 @@ struct PrivacySettingsView: View {
                             set: { allowScreenshots = !$0 }
                         )
                     )
+
+                    if !allowScreenshots {
+                        Divider().padding(.leading, 52)
+
+                        Button {
+                            showScreenshotExceptions = true
+                        } label: {
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.green.opacity(0.15))
+                                        .frame(width: 32, height: 32)
+                                    Image(systemName: "person.badge.shield.checkmark.fill")
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(.green)
+                                }
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(localization.localized("Исключения", "Exceptions"))
+                                        .font(.subheadline)
+                                        .foregroundStyle(.primary)
+                                    Text(localization.localized(
+                                        "Кто может делать скриншоты",
+                                        "Who can take screenshots"
+                                    ))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
+
+                                if !screenshotExceptions.exceptions.isEmpty {
+                                    Text("\(screenshotExceptions.exceptions.count)")
+                                        .font(.caption.bold())
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 2)
+                                        .background(Capsule().fill(Color.green))
+                                }
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
                     Divider().padding(.leading, 52)
                     SettingsToggleRow(
                         icon: "arrowshape.turn.up.right.fill",
@@ -281,6 +334,9 @@ struct PrivacySettingsView: View {
             RatingLockedInfoSheet()
                 .environmentObject(localization)
         }
+        .sheet(isPresented: $showScreenshotExceptions) {
+            screenshotExceptionsSheet
+        }
         .alert(
             localization.localized("Привязать биометрию?", "Bind Biometrics?"),
             isPresented: $showBiometricBindingConfirm
@@ -423,6 +479,85 @@ struct PrivacySettingsView: View {
                     .padding(.horizontal, 10)
                     .padding(.bottom, 10)
                     .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+        }
+    }
+
+    // MARK: - Screenshot Exceptions Sheet
+    private var screenshotExceptionsSheet: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Add user input
+                HStack(spacing: 8) {
+                    Image(systemName: "at")
+                        .foregroundStyle(.secondary)
+                    TextField(
+                        localization.localized("Юзернейм", "Username"),
+                        text: $newExceptionUsername
+                    )
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                    Button {
+                        let u = newExceptionUsername.trimmingCharacters(in: .whitespaces)
+                        guard !u.isEmpty else { return }
+                        screenshotExceptions.addException(u)
+                        newExceptionUsername = ""
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundStyle(.green)
+                    }
+                    .disabled(newExceptionUsername.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                .padding(14)
+                .liquidGlassCard(cornerRadius: 12)
+                .padding(.horizontal)
+                .padding(.top, 12)
+
+                if screenshotExceptions.exceptions.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "person.badge.shield.checkmark.fill")
+                            .font(.system(size: 40))
+                            .foregroundStyle(.secondary.opacity(0.5))
+                        Text(localization.localized(
+                            "Нет исключений. Добавьте юзернейм, чтобы разрешить этому пользователю делать скриншоты ваших переписок.",
+                            "No exceptions. Add a username to allow them to take screenshots of your chats."
+                        ))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                    }
+                    .frame(maxHeight: .infinity)
+                } else {
+                    List {
+                        ForEach(Array(screenshotExceptions.exceptions).sorted(), id: \.self) { username in
+                            HStack {
+                                Text("@\(username)")
+                                    .font(.subheadline)
+                                Spacer()
+                                Button {
+                                    screenshotExceptions.removeException(username)
+                                } label: {
+                                    Image(systemName: "trash.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                }
+            }
+            .navigationTitle(localization.localized("Исключения", "Exceptions"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(localization.localized("Готово", "Done")) {
+                        showScreenshotExceptions = false
+                    }
                 }
             }
         }
