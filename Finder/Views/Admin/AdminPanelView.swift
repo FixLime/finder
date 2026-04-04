@@ -128,7 +128,10 @@ struct AdminPanelView: View {
                         HStack(spacing: 8) {
                             ForEach(AdminAction.allCases, id: \.self) { action in
                                 Button {
-                                    selectedAction = action
+                                    HapticService.selection()
+                                    withAnimation(.spring(response: 0.3)) {
+                                        selectedAction = action
+                                    }
                                 } label: {
                                     HStack(spacing: 6) {
                                         Image(systemName: action.icon)
@@ -151,23 +154,26 @@ struct AdminPanelView: View {
 
                 // Execute button
                 Button {
+                    HapticService.mediumTap()
                     executeAction()
                 } label: {
-                    HStack {
+                    HStack(spacing: 8) {
                         Image(systemName: selectedAction.icon)
                         Text(selectedAction.localizedName(localization))
                     }
-                    .font(.headline)
-                    .foregroundColor(.white)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(usernameInput.isEmpty ? .secondary : selectedAction.color)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(usernameInput.isEmpty ? Color.gray : selectedAction.color)
+                    .liquidGlassCard(cornerRadius: 14)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(usernameInput.isEmpty ? Color.clear : selectedAction.color.opacity(0.4), lineWidth: 1)
                     )
                 }
                 .disabled(usernameInput.isEmpty)
                 .padding(.horizontal)
+                .animation(.spring(response: 0.3), value: selectedAction)
 
                 // Result
                 if showResult, let result = actionResult {
@@ -254,6 +260,7 @@ struct AdminPanelView: View {
                         VStack(spacing: 0) {
                             ForEach(reportService.reports) { report in
                                 Button {
+                                    HapticService.lightTap()
                                     selectedReport = report
                                     showReportDetail = true
                                 } label: {
@@ -281,7 +288,6 @@ struct AdminPanelView: View {
             if let report = selectedReport {
                 ReportDetailSheet(
                     report: report,
-                    localization: localization,
                     onBan: {
                         adminService.banUser(report.reportedUsername)
                         updateDemoUser(report.reportedUsername) { $0.isBanned = true }
@@ -300,6 +306,7 @@ struct AdminPanelView: View {
                     }
                 )
                 .environmentObject(themeManager)
+                .environmentObject(localization)
             }
         }
     }
@@ -344,6 +351,7 @@ struct AdminPanelView: View {
         let u = usernameInput.trimmingCharacters(in: .whitespaces)
         guard !u.isEmpty else { return }
 
+        HapticService.success()
         withAnimation(.spring(response: 0.3)) {
             switch selectedAction {
             case .verify:
@@ -445,92 +453,92 @@ struct AdminPanelView: View {
 
 struct ReportDetailSheet: View {
     let report: UserReport
-    let localization: LocalizationManager
+    @EnvironmentObject var localization: LocalizationManager
+    @EnvironmentObject var themeManager: ThemeManager
     let onBan: () -> Void
     let onUntrust: () -> Void
     let onDismiss: () -> Void
 
+    @State private var appear = false
+
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            // Handle
+            Capsule()
+                .fill(Color.secondary.opacity(0.3))
+                .frame(width: 36, height: 5)
+                .padding(.top, 8)
+
             ScrollView {
                 VStack(spacing: 16) {
-                    // Header
                     let category = ReportCategory(rawValue: report.category)
 
-                    VStack(spacing: 10) {
-                        Image(systemName: category?.icon ?? "questionmark.circle")
-                            .font(.system(size: 36))
-                            .foregroundStyle(category?.color ?? .gray)
-                            .frame(width: 70, height: 70)
-                            .background((category?.color ?? .gray).opacity(0.12))
-                            .cornerRadius(18)
+                    // Header icon
+                    ZStack {
+                        Circle()
+                            .fill((category?.color ?? .gray).opacity(0.15))
+                            .frame(width: 80, height: 80)
 
+                        Image(systemName: category?.icon ?? "questionmark.circle")
+                            .font(.system(size: 32))
+                            .foregroundStyle(category?.color ?? .gray)
+                            .symbolEffect(.bounce, value: appear)
+                    }
+                    .scaleEffect(appear ? 1 : 0.5)
+                    .opacity(appear ? 1 : 0)
+                    .padding(.top, 16)
+
+                    VStack(spacing: 4) {
                         Text(category?.localizedName(isRussian: localization.isRussian) ?? report.category)
-                            .font(.headline)
+                            .font(.title3.bold())
 
                         Text(category?.localizedDescription(isRussian: localization.isRussian) ?? "")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.top, 8)
 
-                    // Users
+                    // Info card
                     VStack(spacing: 0) {
-                        HStack {
-                            Text(localization.localized("На кого", "Reported"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text("@\(report.reportedUsername)")
-                                .font(.subheadline.bold())
-                                .foregroundStyle(.red)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-
+                        reportInfoRow(
+                            label: localization.localized("На кого", "Reported"),
+                            value: "@\(report.reportedUsername)",
+                            valueColor: .red,
+                            isBold: true
+                        )
                         Divider().padding(.leading, 14)
 
-                        HStack {
-                            Text(localization.localized("Кто отправил", "Reporter"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text("@\(report.reporterUsername)")
-                                .font(.subheadline)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-
+                        reportInfoRow(
+                            label: localization.localized("От кого", "From"),
+                            value: "@\(report.reporterUsername)",
+                            valueColor: .primary,
+                            isBold: false
+                        )
                         Divider().padding(.leading, 14)
 
-                        HStack {
-                            Text(localization.localized("Дата", "Date"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text(report.timestamp, style: .date)
-                                .font(.subheadline)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
+                        reportInfoRow(
+                            label: localization.localized("Дата", "Date"),
+                            value: report.timestamp.formatted(.dateTime.day().month(.wide).year()),
+                            valueColor: .primary,
+                            isBold: false
+                        )
 
                         if report.includeConversation {
                             Divider().padding(.leading, 14)
-                            HStack {
+                            HStack(spacing: 6) {
                                 Image(systemName: "text.bubble.fill")
                                     .font(.caption)
-                                    .foregroundStyle(.blue)
                                 Text(localization.localized("Переписка прикреплена", "Conversation attached"))
                                     .font(.caption)
-                                    .foregroundStyle(.blue)
-                                Spacer()
                             }
+                            .foregroundStyle(.blue)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
                         }
                     }
                     .liquidGlassCard(cornerRadius: 16)
                     .padding(.horizontal)
+                    .offset(y: appear ? 0 : 20)
+                    .opacity(appear ? 1 : 0)
 
                     // Description
                     if !report.description.isEmpty {
@@ -544,61 +552,93 @@ struct ReportDetailSheet: View {
                                 .font(.subheadline)
                                 .padding(14)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .liquidGlassCard(cornerRadius: 16)
+                                .liquidGlassCard(cornerRadius: 14)
                                 .padding(.horizontal)
                         }
+                        .offset(y: appear ? 0 : 20)
+                        .opacity(appear ? 1 : 0)
                     }
 
                     // Actions
                     VStack(spacing: 10) {
                         Button {
+                            HapticService.heavyTap()
                             onBan()
                         } label: {
-                            HStack {
+                            HStack(spacing: 8) {
                                 Image(systemName: "nosign")
-                                Text(localization.localized("Забанить @\(report.reportedUsername)", "Ban @\(report.reportedUsername)"))
+                                Text(localization.localized("Забанить", "Ban"))
                             }
-                            .font(.headline)
-                            .foregroundColor(.white)
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.red)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.red))
+                            .padding(.vertical, 13)
+                            .liquidGlassCard(cornerRadius: 14)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                            )
                         }
 
                         Button {
+                            HapticService.mediumTap()
                             onUntrust()
                         } label: {
-                            HStack {
+                            HStack(spacing: 8) {
                                 Image(systemName: "exclamationmark.triangle.fill")
-                                Text(localization.localized("Пометить недоверенным", "Mark as untrusted"))
+                                Text(localization.localized("Недоверенный", "Untrusted"))
                             }
-                            .font(.headline)
-                            .foregroundColor(.white)
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.orange)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.orange))
+                            .padding(.vertical, 13)
+                            .liquidGlassCard(cornerRadius: 14)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                            )
                         }
 
                         Button {
+                            HapticService.lightTap()
                             onDismiss()
                         } label: {
-                            HStack {
+                            HStack(spacing: 6) {
                                 Image(systemName: "xmark.circle.fill")
-                                Text(localization.localized("Отклонить жалобу", "Dismiss report"))
+                                Text(localization.localized("Отклонить", "Dismiss"))
                             }
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
+                            .padding(.vertical, 13)
                         }
                     }
                     .padding(.horizontal)
+                    .offset(y: appear ? 0 : 30)
+                    .opacity(appear ? 1 : 0)
 
-                    Spacer(minLength: 40)
+                    Spacer(minLength: 30)
                 }
             }
-            .navigationTitle(localization.localized("Жалоба", "Report"))
-            .navigationBarTitleDisplayMode(.inline)
         }
+        .onAppear {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                appear = true
+            }
+        }
+    }
+
+    private func reportInfoRow(label: String, value: String, valueColor: Color, isBold: Bool) -> some View {
+        HStack {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(isBold ? .subheadline.bold() : .subheadline)
+                .foregroundStyle(valueColor)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 }

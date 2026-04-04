@@ -487,77 +487,106 @@ struct PrivacySettingsView: View {
     // MARK: - Screenshot Exceptions Sheet
     private var screenshotExceptionsSheet: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                // Add user input
-                HStack(spacing: 8) {
-                    Image(systemName: "at")
-                        .foregroundStyle(.secondary)
-                    TextField(
-                        localization.localized("Юзернейм", "Username"),
-                        text: $newExceptionUsername
-                    )
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-
-                    Button {
-                        let u = newExceptionUsername.trimmingCharacters(in: .whitespaces)
-                        guard !u.isEmpty else { return }
-                        screenshotExceptions.addException(u)
-                        newExceptionUsername = ""
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 24))
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Add user input
+                    HStack(spacing: 8) {
+                        Image(systemName: "at")
                             .foregroundStyle(.green)
-                    }
-                    .disabled(newExceptionUsername.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-                .padding(14)
-                .liquidGlassCard(cornerRadius: 12)
-                .padding(.horizontal)
-                .padding(.top, 12)
+                        TextField(
+                            localization.localized("Юзернейм", "Username"),
+                            text: $newExceptionUsername
+                        )
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
 
-                if screenshotExceptions.exceptions.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "person.badge.shield.checkmark.fill")
-                            .font(.system(size: 40))
-                            .foregroundStyle(.secondary.opacity(0.5))
-                        Text(localization.localized(
-                            "Нет исключений. Добавьте юзернейм, чтобы разрешить этому пользователю делать скриншоты ваших переписок.",
-                            "No exceptions. Add a username to allow them to take screenshots of your chats."
-                        ))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
+                        Button {
+                            HapticService.success()
+                            let u = newExceptionUsername.trimmingCharacters(in: .whitespaces)
+                            guard !u.isEmpty else { return }
+                            withAnimation(.spring(response: 0.3)) {
+                                screenshotExceptions.addException(u)
+                            }
+                            newExceptionUsername = ""
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(.green)
+                        }
+                        .disabled(newExceptionUsername.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
-                    .frame(maxHeight: .infinity)
-                } else {
-                    List {
-                        ForEach(Array(screenshotExceptions.exceptions).sorted(), id: \.self) { username in
-                            HStack {
-                                Text("@\(username)")
-                                    .font(.subheadline)
-                                Spacer()
-                                Button {
-                                    screenshotExceptions.removeException(username)
-                                } label: {
-                                    Image(systemName: "trash.fill")
+                    .padding(14)
+                    .liquidGlassCard(cornerRadius: 14)
+                    .padding(.horizontal)
+
+                    if screenshotExceptions.exceptions.isEmpty {
+                        VStack(spacing: 14) {
+                            Image(systemName: "person.badge.shield.checkmark.fill")
+                                .font(.system(size: 44))
+                                .foregroundStyle(.secondary.opacity(0.3))
+                                .padding(.top, 40)
+
+                            Text(localization.localized(
+                                "Нет исключений",
+                                "No exceptions"
+                            ))
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+
+                            Text(localization.localized(
+                                "Добавьте юзернейм, чтобы разрешить делать скриншоты",
+                                "Add a username to allow screenshots"
+                            ))
+                            .font(.caption)
+                            .foregroundStyle(.secondary.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                        }
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(Array(screenshotExceptions.exceptions).sorted(), id: \.self) { username in
+                                HStack(spacing: 10) {
+                                    Image(systemName: "person.fill")
                                         .font(.caption)
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(.green)
+                                        .frame(width: 24)
+                                    Text("@\(username)")
+                                        .font(.subheadline)
+                                    Spacer()
+                                    Button {
+                                        HapticService.lightTap()
+                                        withAnimation(.spring(response: 0.3)) {
+                                            screenshotExceptions.removeException(username)
+                                        }
+                                    } label: {
+                                        Image(systemName: "minus.circle.fill")
+                                            .font(.system(size: 18))
+                                            .foregroundStyle(.red.opacity(0.7))
+                                    }
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 11)
+
+                                if username != Array(screenshotExceptions.exceptions).sorted().last {
+                                    Divider().padding(.leading, 48)
                                 }
                             }
                         }
+                        .liquidGlassCard(cornerRadius: 16)
+                        .padding(.horizontal)
                     }
-                    .listStyle(.insetGrouped)
                 }
+                .padding(.top, 12)
             }
             .navigationTitle(localization.localized("Исключения", "Exceptions"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(localization.localized("Готово", "Done")) {
+                        HapticService.lightTap()
                         showScreenshotExceptions = false
                     }
+                    .fontWeight(.semibold)
                 }
             }
         }
@@ -622,8 +651,11 @@ struct PrivacySettingsView: View {
                 .foregroundStyle(.purple)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.purple.opacity(0.06))
-                .cornerRadius(10)
+                .liquidGlassCard(cornerRadius: 10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.purple.opacity(0.15), lineWidth: 0.5)
+                )
                 .padding(.horizontal, 10)
                 .padding(.bottom, 10)
             }

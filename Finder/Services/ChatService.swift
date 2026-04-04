@@ -26,9 +26,55 @@ class ChatService: ObservableObject {
     private let network = NetworkService.shared
     private let ws = WebSocketService.shared
 
+    private static let chatsFileURL: URL = {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        return docs.appendingPathComponent("finder_chats.json")
+    }()
+
     private init() {
-        loadDemoData()
+        if !loadChatsFromDisk() {
+            loadDemoData()
+        }
         setupWebSocketListeners()
+        setupAutoSave()
+    }
+
+    private func setupAutoSave() {
+        $chats
+            .debounce(for: .seconds(1), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.saveChats()
+            }
+            .store(in: &cancellables)
+    }
+
+    // MARK: - Persistence
+
+    func saveChats() {
+        do {
+            let data = try JSONEncoder().encode(chats)
+            try data.write(to: Self.chatsFileURL, options: .atomic)
+        } catch {
+            print("[ChatService] Failed to save chats: \(error)")
+        }
+    }
+
+    private func loadChatsFromDisk() -> Bool {
+        guard FileManager.default.fileExists(atPath: Self.chatsFileURL.path) else {
+            return false
+        }
+        do {
+            let data = try Data(contentsOf: Self.chatsFileURL)
+            let loaded = try JSONDecoder().decode([Chat].self, from: data)
+            if !loaded.isEmpty {
+                chats = loaded
+                return true
+            }
+            return false
+        } catch {
+            print("[ChatService] Failed to load chats: \(error)")
+            return false
+        }
     }
 
     // MARK: - Server Integration

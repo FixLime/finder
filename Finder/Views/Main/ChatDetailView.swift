@@ -338,71 +338,91 @@ struct ChatDetailView: View {
 
     // MARK: - Screenshot Warning Popup
 
+    @State private var screenshotIconPulse = false
+
     private var screenshotWarningPopup: some View {
         ZStack {
-            Color.black.opacity(0.5)
+            Color.black.opacity(0.4)
                 .ignoresSafeArea()
                 .onTapGesture {
-                    withAnimation(.spring(response: 0.3)) {
-                        showScreenshotPopup = false
-                    }
+                    dismissScreenshotPopup()
                 }
 
-            VStack(spacing: 16) {
+            VStack(spacing: 20) {
                 ZStack {
+                    // Pulse ring
+                    Circle()
+                        .stroke(Color.orange.opacity(0.3), lineWidth: 3)
+                        .frame(width: 100, height: 100)
+                        .scaleEffect(screenshotIconPulse ? 1.3 : 1.0)
+                        .opacity(screenshotIconPulse ? 0 : 0.6)
+
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [.orange, .red],
+                                colors: [.orange, .red.opacity(0.8)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
                         .frame(width: 80, height: 80)
-                        .shadow(color: .orange.opacity(0.4), radius: 12)
+                        .shadow(color: .orange.opacity(0.4), radius: 16)
 
                     Image(systemName: "eye.slash.fill")
-                        .font(.system(size: 36))
+                        .font(.system(size: 34))
                         .foregroundColor(.white)
+                        .symbolEffect(.bounce, value: showScreenshotPopup)
+                }
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                        screenshotIconPulse = true
+                    }
                 }
 
-                Text(localization.localized("Не-а, хе-хе", "Nope, hehe"))
-                    .font(.title2.bold())
+                VStack(spacing: 8) {
+                    Text(localization.localized("Не-а, хе-хе", "Nope, hehe"))
+                        .font(.title3.bold())
 
-                Text(localization.localized(
-                    "Сам запретил скриншоты — сам не скринь! Уважай конфиденциальность собеседника, как хочешь, чтобы уважали твою",
-                    "You blocked screenshots yourself — don't screenshot others! Respect others' privacy, just as you want yours respected"
-                ))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 8)
+                    Text(localization.localized(
+                        "Сам запретил скриншоты — сам не скринь! Уважай приватность собеседника",
+                        "You blocked screenshots — don't screenshot others! Respect their privacy"
+                    ))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 4)
 
                 Button {
-                    withAnimation(.spring(response: 0.3)) {
-                        showScreenshotPopup = false
-                    }
+                    dismissScreenshotPopup()
                 } label: {
                     Text(localization.localized("Ладно-ладно", "Okay okay"))
-                        .font(.headline)
-                        .foregroundColor(.white)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.orange)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color.orange)
+                        .padding(.vertical, 13)
+                        .liquidGlassCard(cornerRadius: 14)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
                         )
                 }
             }
             .padding(24)
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(.ultraThickMaterial)
-            )
-            .padding(.horizontal, 32)
-            .transition(.scale.combined(with: .opacity))
+            .liquidGlassCard(cornerRadius: 28)
+            .padding(.horizontal, 28)
+            .transition(.scale(scale: 0.85).combined(with: .opacity))
         }
         .transition(.opacity)
+    }
+
+    private func dismissScreenshotPopup() {
+        HapticService.lightTap()
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            showScreenshotPopup = false
+            screenshotIconPulse = false
+        }
     }
 
     private func handleScreenshot() {
