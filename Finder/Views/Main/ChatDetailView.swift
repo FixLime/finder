@@ -244,14 +244,14 @@ struct ChatDetailView: View {
             handleScreenshot()
         }
         .alert(
-            localization.localized("Скриншот обнаружен", "Screenshot Detected"),
+            localization.localized("Ой-ой", "Oops"),
             isPresented: $showScreenshotAlert
         ) {
-            Button(localization.localized("Понял", "Got it"), role: .cancel) { }
+            Button(localization.localized("Ладно-ладно", "Okay okay"), role: .cancel) { }
         } message: {
             Text(localization.localized(
-                "Если вы хотите конфиденциальности — соблюдайте её сами. Не делайте скриншоты переписок. Собеседник уведомлён.",
-                "If you want privacy — respect it yourself. Don't screenshot conversations. The other person has been notified."
+                "Привет! Прости, но собеседник запретил скриншоты. Если хочешь конфиденциальности — соблюдай её и сам, хе-хе",
+                "Hey! Sorry, but the other person doesn't allow screenshots. If you want privacy — respect it yourself too, hehe"
             ))
         }
     }
@@ -320,8 +320,8 @@ struct ChatDetailView: View {
         // Add system message to chat notifying about screenshot
         let currentName = AuthService.shared.currentDisplayName
         let systemText = localization.localized(
-            "📸 \(currentName) сделал(а) скриншот переписки",
-            "📸 \(currentName) took a screenshot of the chat"
+            "\(currentName) сделал(а) скриншот переписки",
+            "\(currentName) took a screenshot of the chat"
         )
         let msg = Message.system(systemText, chatId: chat.id)
         if let index = chatService.chats.firstIndex(where: { $0.id == chat.id }) {

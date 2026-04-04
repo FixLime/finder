@@ -4,11 +4,14 @@ struct AdminPanelView: View {
     @EnvironmentObject var localization: LocalizationManager
     @EnvironmentObject var chatService: ChatService
     @ObservedObject var adminService = AdminService.shared
+    @ObservedObject var reportService = ReportService.shared
 
     @State private var usernameInput = ""
     @State private var actionResult: String?
     @State private var showResult = false
     @State private var selectedAction: AdminAction = .verify
+    @State private var selectedReport: UserReport?
+    @State private var showReportDetail = false
 
     enum AdminAction: String, CaseIterable {
         case verify, unverify, ban, unban, deleteAccount, restore, untrust, trust
@@ -222,12 +225,81 @@ struct AdminPanelView: View {
                     )
                 }
 
+                // MARK: - Reports section
+                if !reportService.reports.isEmpty {
+                    Divider().padding(.horizontal)
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.bubble.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.red)
+                            Text(localization.localized("Жалобы", "Reports"))
+                                .font(.caption.bold())
+                                .foregroundStyle(.secondary)
+
+                            Spacer()
+
+                            Text("\(reportService.reports.count)")
+                                .font(.caption.bold())
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.red))
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 6)
+
+                        VStack(spacing: 0) {
+                            ForEach(reportService.reports) { report in
+                                Button {
+                                    selectedReport = report
+                                    showReportDetail = true
+                                } label: {
+                                    reportRow(report)
+                                }
+                                .buttonStyle(.plain)
+
+                                if report.id != reportService.reports.last?.id {
+                                    Divider().padding(.leading, 14)
+                                }
+                            }
+                        }
+                        .liquidGlassCard(cornerRadius: 16)
+                        .padding(.horizontal)
+                    }
+                }
+
                 Spacer(minLength: 100)
             }
             .padding(.top, 8)
         }
         .navigationTitle(localization.adminPanel)
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showReportDetail) {
+            if let report = selectedReport {
+                ReportDetailSheet(
+                    report: report,
+                    localization: localization,
+                    onBan: {
+                        adminService.banUser(report.reportedUsername)
+                        updateDemoUser(report.reportedUsername) { $0.isBanned = true }
+                        reportService.dismissReport(report.id)
+                        showReportDetail = false
+                    },
+                    onUntrust: {
+                        adminService.untrustUser(report.reportedUsername)
+                        updateDemoUser(report.reportedUsername) { $0.isUntrusted = true }
+                        reportService.dismissReport(report.id)
+                        showReportDetail = false
+                    },
+                    onDismiss: {
+                        reportService.dismissReport(report.id)
+                        showReportDetail = false
+                    }
+                )
+            }
+        }
     }
 
     private func adminListSection(title: String, icon: String, iconColor: Color, items: [String]) -> some View {
@@ -327,6 +399,204 @@ struct AdminPanelView: View {
                     update(&chatService.chats[chatIndex].participants[pIndex])
                 }
             }
+        }
+    }
+
+    private func reportRow(_ report: UserReport) -> some View {
+        HStack(spacing: 10) {
+            let category = ReportCategory(rawValue: report.category)
+            Image(systemName: category?.icon ?? "questionmark.circle")
+                .font(.system(size: 14))
+                .foregroundStyle(category?.color ?? .gray)
+                .frame(width: 28, height: 28)
+                .background((category?.color ?? .gray).opacity(0.12))
+                .cornerRadius(6)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text("@\(report.reportedUsername)")
+                        .font(.subheadline.bold())
+                    Text("←")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text("@\(report.reporterUsername)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text(category?.localizedName(isRussian: localization.isRussian) ?? report.category)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+}
+
+// MARK: - Report Detail Sheet
+
+struct ReportDetailSheet: View {
+    let report: UserReport
+    let localization: LocalizationManager
+    let onBan: () -> Void
+    let onUntrust: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Header
+                    let category = ReportCategory(rawValue: report.category)
+
+                    VStack(spacing: 10) {
+                        Image(systemName: category?.icon ?? "questionmark.circle")
+                            .font(.system(size: 36))
+                            .foregroundStyle(category?.color ?? .gray)
+                            .frame(width: 70, height: 70)
+                            .background((category?.color ?? .gray).opacity(0.12))
+                            .cornerRadius(18)
+
+                        Text(category?.localizedName(isRussian: localization.isRussian) ?? report.category)
+                            .font(.headline)
+
+                        Text(category?.localizedDescription(isRussian: localization.isRussian) ?? "")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 8)
+
+                    // Users
+                    VStack(spacing: 0) {
+                        HStack {
+                            Text(localization.localized("На кого", "Reported"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("@\(report.reportedUsername)")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.red)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+
+                        Divider().padding(.leading, 14)
+
+                        HStack {
+                            Text(localization.localized("Кто отправил", "Reporter"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("@\(report.reporterUsername)")
+                                .font(.subheadline)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+
+                        Divider().padding(.leading, 14)
+
+                        HStack {
+                            Text(localization.localized("Дата", "Date"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(report.timestamp, style: .date)
+                                .font(.subheadline)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+
+                        if report.includeConversation {
+                            Divider().padding(.leading, 14)
+                            HStack {
+                                Image(systemName: "text.bubble.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.blue)
+                                Text(localization.localized("Переписка прикреплена", "Conversation attached"))
+                                    .font(.caption)
+                                    .foregroundStyle(.blue)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                        }
+                    }
+                    .liquidGlassCard(cornerRadius: 16)
+                    .padding(.horizontal)
+
+                    // Description
+                    if !report.description.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(localization.localized("Описание", "Description"))
+                                .font(.caption.bold())
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 20)
+
+                            Text(report.description)
+                                .font(.subheadline)
+                                .padding(14)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .liquidGlassCard(cornerRadius: 16)
+                                .padding(.horizontal)
+                        }
+                    }
+
+                    // Actions
+                    VStack(spacing: 10) {
+                        Button {
+                            onBan()
+                        } label: {
+                            HStack {
+                                Image(systemName: "nosign")
+                                Text(localization.localized("Забанить @\(report.reportedUsername)", "Ban @\(report.reportedUsername)"))
+                            }
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.red))
+                        }
+
+                        Button {
+                            onUntrust()
+                        } label: {
+                            HStack {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                Text(localization.localized("Пометить недоверенным", "Mark as untrusted"))
+                            }
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.orange))
+                        }
+
+                        Button {
+                            onDismiss()
+                        } label: {
+                            HStack {
+                                Image(systemName: "xmark.circle.fill")
+                                Text(localization.localized("Отклонить жалобу", "Dismiss report"))
+                            }
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                        }
+                    }
+                    .padding(.horizontal)
+
+                    Spacer(minLength: 40)
+                }
+            }
+            .navigationTitle(localization.localized("Жалоба", "Report"))
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }

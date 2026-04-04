@@ -116,6 +116,10 @@ class ReportService: ObservableObject {
         }
     }
 
+    func dismissReport(_ id: UUID) {
+        reports.removeAll { $0.id == id }
+    }
+
     private func sendReportToServer(_ report: UserReport) async throws {
         // Server integration placeholder
         // In production: POST to /api/reports with report data
