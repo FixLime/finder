@@ -16,6 +16,8 @@ struct FinderIDSetupView: View {
     @State private var showAdvancedOptions = false
     @State private var showGovLogin = false
     @State private var showRestoreAccount = false
+    @State private var showLegalSheet = false
+    @State private var legalSheetType = "terms" // "terms" or "privacy"
 
     enum SetupStep {
         case username
@@ -95,6 +97,9 @@ struct FinderIDSetupView: View {
                 .environmentObject(localization)
                 .environmentObject(chatService)
         }
+        .sheet(isPresented: $showLegalSheet) {
+            LegalSheetView(type: legalSheetType, localization: localization)
+        }
         .onAppear {
             withAnimation(.spring(response: 0.5).delay(0.2)) {
                 appear = true
@@ -152,6 +157,40 @@ struct FinderIDSetupView: View {
             .padding(.horizontal, 32)
             .opacity(username.count >= 3 ? 1 : 0.5)
             .disabled(username.count < 3)
+
+            // Terms & Privacy
+            VStack(spacing: 2) {
+                Text(localization.localized(
+                    "Регистрируясь, вы соглашаетесь с",
+                    "By registering, you agree to the"
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                HStack(spacing: 0) {
+                    Button {
+                        legalSheetType = "terms"
+                        showLegalSheet = true
+                    } label: {
+                        Text(localization.localized("Условиями использования", "Terms of Service"))
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.blue)
+                    }
+
+                    Text(localization.localized(" и ", " and "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Button {
+                        legalSheetType = "privacy"
+                        showLegalSheet = true
+                    } label: {
+                        Text(localization.localized("Политикой конфиденциальности", "Privacy Policy"))
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.blue)
+                    }
+                }
+            }
 
             // Advanced options
             Button {
