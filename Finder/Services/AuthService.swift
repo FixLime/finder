@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import CryptoKit
 
 class AuthService: ObservableObject {
     static let shared = AuthService()
@@ -16,6 +17,12 @@ class AuthService: ObservableObject {
     @AppStorage("storedPIN") private var storedPIN: String = ""
     @AppStorage("decoyPIN") var decoyPIN: String = ""
     @AppStorage("isDecoyMode") var isDecoyMode: Bool = false
+
+    // Registered accounts: [username: passwordHash]
+    private var registeredAccounts: [String: String] {
+        get { UserDefaults.standard.dictionary(forKey: "registeredAccounts") as? [String: String] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: "registeredAccounts") }
+    }
 
     @Published var isAuthenticated: Bool = false
     @Published var isPINLocked: Bool = true
@@ -89,6 +96,36 @@ class AuthService: ObservableObject {
                 }
             }
         }
+    }
+
+    // MARK: - Password Auth
+
+    private func hashPassword(_ password: String) -> String {
+        let data = Data(password.utf8)
+        let hash = SHA256.hash(data: data)
+        return hash.map { String(format: "%02x", $0) }.joined()
+    }
+
+    func isUsernameRegistered(_ username: String) -> Bool {
+        registeredAccounts[username.lowercased()] != nil
+    }
+
+    func loginWithPassword(username: String, password: String) -> Bool {
+        let u = username.lowercased()
+        guard let storedHash = registeredAccounts[u] else { return false }
+        return hashPassword(password) == storedHash
+    }
+
+    func register(username: String, displayName: String, password: String) {
+        // Store password hash
+        var accounts = registeredAccounts
+        accounts[username.lowercased()] = hashPassword(password)
+        registeredAccounts = accounts
+
+        register(username: username, displayName: displayName)
+
+        // Server auth in background
+        serverAuth(username: username, password: password, displayName: displayName)
     }
 
     func register(username: String, displayName: String) {

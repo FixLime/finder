@@ -6,11 +6,13 @@ import android.content.SharedPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.security.MessageDigest
 import java.util.UUID
 
 object AuthService {
 
     private const val PREFS_NAME = "finder_auth_prefs"
+    private const val ACCOUNTS_PREFS_NAME = "finder_registered_accounts"
     private const val KEY_IS_AUTHENTICATED = "is_authenticated"
     private const val KEY_USERNAME = "username"
     private const val KEY_DISPLAY_NAME = "display_name"
@@ -27,6 +29,7 @@ object AuthService {
     private const val KEY_CUSTOM_BIOMETRIC_ENABLED = "custom_biometric_enabled"
 
     private lateinit var prefs: SharedPreferences
+    private lateinit var accountsPrefs: SharedPreferences
 
     private val _isAuthenticated = MutableStateFlow(false)
     val isAuthenticated: StateFlow<Boolean> = _isAuthenticated.asStateFlow()
@@ -69,6 +72,7 @@ object AuthService {
 
     fun init(application: Application) {
         prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        accountsPrefs = application.getSharedPreferences(ACCOUNTS_PREFS_NAME, Context.MODE_PRIVATE)
         loadState()
     }
 
@@ -102,6 +106,30 @@ object AuthService {
             .putBoolean(KEY_BIOMETRIC_BINDING_ENABLED, _biometricBindingEnabled.value)
             .putBoolean(KEY_CUSTOM_BIOMETRIC_ENABLED, _customBiometricEnabled.value)
             .apply()
+    }
+
+    // MARK: - Password Auth
+
+    private fun hashPassword(password: String): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        val digest = md.digest(password.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    fun isUsernameRegistered(username: String): Boolean {
+        return accountsPrefs.contains(username.lowercase())
+    }
+
+    fun loginWithPassword(username: String, password: String): Boolean {
+        val storedHash = accountsPrefs.getString(username.lowercase(), null) ?: return false
+        return hashPassword(password) == storedHash
+    }
+
+    fun registerWithPassword(username: String, displayName: String, password: String) {
+        accountsPrefs.edit()
+            .putString(username.lowercase(), hashPassword(password))
+            .apply()
+        login(username, displayName)
     }
 
     fun login(username: String, displayName: String) {

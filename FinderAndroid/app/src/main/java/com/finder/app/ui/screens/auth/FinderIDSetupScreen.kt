@@ -73,6 +73,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -93,12 +94,14 @@ fun FinderIDSetupScreen(
 
     var currentStep by remember { mutableIntStateOf(1) }
     var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
     var generatedFinderID by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
     var showLegalSheet by remember { mutableStateOf(false) }
     var legalSheetType by remember { mutableStateOf("terms") } // "terms" or "privacy"
+    var isLoginMode by remember { mutableStateOf(false) }
 
     // Progress fraction
     val progress by animateFloatAsState(
@@ -119,25 +122,54 @@ fun FinderIDSetupScreen(
             trimmed.length < 3 -> {
                 errorMessage = localized(isRussian, "Минимум 3 символа", "Minimum 3 characters")
                 showError = true
+                return
             }
             trimmed.length > 30 -> {
                 errorMessage = localized(isRussian, "Максимум 30 символов", "Maximum 30 characters")
                 showError = true
+                return
             }
             trimmed.contains(" ") -> {
                 errorMessage = localized(isRussian, "Пробелы запрещены", "Spaces not allowed")
                 showError = true
+                return
             }
             !trimmed.all { it.isLetterOrDigit() || it == '_' } -> {
                 errorMessage = localized(isRussian, "Только буквы, цифры и _", "Only letters, digits and _")
                 showError = true
+                return
             }
-            else -> {
-                username = trimmed
-                showError = false
-                currentStep = 2
+            password.length < 4 -> {
+                errorMessage = localized(isRussian, "Пароль минимум 4 символа", "Password minimum 4 characters")
+                showError = true
+                return
             }
         }
+        username = trimmed
+
+        // Check if username already registered
+        if (AuthService.isUsernameRegistered(trimmed)) {
+            if (!isLoginMode) {
+                isLoginMode = true
+                return
+            }
+            // Login mode — verify password
+            if (AuthService.loginWithPassword(trimmed, password)) {
+                showError = false
+                AuthService.login(trimmed, AuthService.currentDisplayName.value.ifEmpty { trimmed })
+                AuthService.completeOnboarding()
+                onSetupComplete()
+            } else {
+                errorMessage = localized(isRussian, "Неверный пароль", "Wrong password")
+                showError = true
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            }
+            return
+        }
+
+        // New registration — proceed to display name
+        showError = false
+        currentStep = 2
     }
 
     fun advanceDisplayName() {
@@ -148,8 +180,7 @@ fun FinderIDSetupScreen(
             return
         }
         showError = false
-        // Check if username is admin restore code
-        AuthService.login(username, displayName.trim())
+        AuthService.registerWithPassword(username, displayName.trim(), password)
         generatedFinderID = AuthService.currentFinderID.value
         currentStep = 3
     }
@@ -229,7 +260,17 @@ fun FinderIDSetupScreen(
                         onUsernameChange = {
                             username = it.filter { c -> !c.isWhitespace() }
                             showError = false
+                            if (isLoginMode) {
+                                isLoginMode = false
+                                password = ""
+                            }
                         },
+                        password = password,
+                        onPasswordChange = {
+                            password = it
+                            showError = false
+                        },
+                        isLoginMode = isLoginMode,
                         isRussian = isRussian,
                         onNext = { validateAndAdvanceUsername() },
                         onOpenTerms = {
@@ -327,6 +368,9 @@ fun FinderIDSetupScreen(
 private fun StepUsername(
     username: String,
     onUsernameChange: (String) -> Unit,
+    password: String,
+    onPasswordChange: (String) -> Unit,
+    isLoginMode: Boolean,
     isRussian: Boolean,
     onNext: () -> Unit,
     onOpenTerms: () -> Unit = {},
@@ -349,7 +393,7 @@ private fun StepUsername(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Filled.AlternateEmail,
+                imageVector = if (isLoginMode) Icons.Filled.Person else Icons.Filled.AlternateEmail,
                 contentDescription = null,
                 tint = colors.accentBlue,
                 modifier = Modifier.size(36.dp)
@@ -359,7 +403,10 @@ private fun StepUsername(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = localized(isRussian, "Создайте имя пользователя", "Create your username"),
+            text = if (isLoginMode)
+                localized(isRussian, "Вход в аккаунт", "Sign in to account")
+            else
+                localized(isRussian, "Создайте имя пользователя", "Create your username"),
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             color = colors.textPrimary,
@@ -369,13 +416,16 @@ private fun StepUsername(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = localized(
-                isRussian,
-                "Это ваш уникальный идентификатор в Finder.\nБез номера телефона, без почты.",
-                "This is your unique Finder identifier.\nNo phone number, no email."
-            ),
+            text = if (isLoginMode)
+                localized(isRussian,
+                    "Это имя уже занято. Введите пароль для входа.",
+                    "This username is taken. Enter password to sign in.")
+            else
+                localized(isRussian,
+                    "Это ваш уникальный идентификатор в Finder.\nБез номера телефона, без почты.",
+                    "This is your unique Finder identifier.\nNo phone number, no email."),
             fontSize = 14.sp,
-            color = colors.textSecondary,
+            color = if (isLoginMode) colors.warningOrange else colors.textSecondary,
             textAlign = TextAlign.Center,
             lineHeight = 20.sp
         )
@@ -393,7 +443,34 @@ private fun StepUsername(
                 keyboardType = KeyboardType.Ascii,
                 imeAction = ImeAction.Next
             ),
-            keyboardActions = KeyboardActions(onNext = { onNext() }),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = colors.glassTextFieldBackground,
+                unfocusedContainerColor = colors.glassTextFieldBackground,
+                focusedBorderColor = colors.accentBlue,
+                unfocusedBorderColor = colors.glassBorder,
+                focusedTextColor = colors.textPrimary,
+                unfocusedTextColor = colors.textPrimary,
+                cursorColor = colors.accentBlue
+            ),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        OutlinedTextField(
+            value = password,
+            onValueChange = onPasswordChange,
+            label = {
+                Text(localized(isRussian, "Пароль", "Password"), color = colors.textSecondary)
+            },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(onDone = { onNext() }),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = colors.glassTextFieldBackground,
                 unfocusedContainerColor = colors.glassTextFieldBackground,
@@ -407,7 +484,7 @@ private fun StepUsername(
             modifier = Modifier.fillMaxWidth(),
             supportingText = {
                 Text(
-                    localized(isRussian, "3-30 символов, без пробелов", "3-30 characters, no spaces"),
+                    localized(isRussian, "Минимум 4 символа", "Minimum 4 characters"),
                     color = colors.textSecondary.copy(alpha = 0.6f),
                     fontSize = 12.sp
                 )
@@ -417,9 +494,10 @@ private fun StepUsername(
         Spacer(modifier = Modifier.height(24.dp))
 
         GlassActionButton(
-            text = localized(isRussian, "Далее", "Next"),
+            text = if (isLoginMode) localized(isRussian, "Войти", "Sign In")
+                   else localized(isRussian, "Далее", "Next"),
             onClick = onNext,
-            enabled = username.length >= 3
+            enabled = username.length >= 3 && password.length >= 4
         )
 
         Spacer(modifier = Modifier.height(16.dp))

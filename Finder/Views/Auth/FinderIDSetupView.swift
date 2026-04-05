@@ -5,6 +5,7 @@ struct FinderIDSetupView: View {
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var localization: LocalizationManager
     @State private var username = ""
+    @State private var password = ""
     @State private var displayName = ""
     @State private var step: SetupStep = .username
     @State private var showError = false
@@ -16,6 +17,7 @@ struct FinderIDSetupView: View {
     @State private var showRestoreAccount = false
     @State private var showLegalSheet = false
     @State private var legalSheetType = "terms" // "terms" or "privacy"
+    @State private var isLoginMode = false // true when username already exists
 
     enum SetupStep {
         case username
@@ -113,48 +115,68 @@ struct FinderIDSetupView: View {
                 Circle()
                     .fill(Color.blue.opacity(0.15))
                     .frame(width: 80, height: 80)
-                Image(systemName: "at")
+                Image(systemName: isLoginMode ? "person.badge.key.fill" : "at")
                     .font(.system(size: 36, weight: .medium))
                     .foregroundStyle(.blue)
             }
             .scaleEffect(appear ? 1 : 0.5)
             .opacity(appear ? 1 : 0)
 
-            Text(localization.localized("Создайте имя пользователя", "Create your username"))
+            Text(isLoginMode
+                ? localization.localized("Вход в аккаунт", "Sign in to account")
+                : localization.localized("Создайте имя пользователя", "Create your username"))
                 .font(.title2.bold())
                 .offset(y: appear ? 0 : 20)
                 .opacity(appear ? 1 : 0)
 
-            Text(localization.localized(
-                "Это ваш уникальный идентификатор в Finder.\nБез номера телефона, без почты.",
-                "This is your unique Finder identifier.\nNo phone number, no email."
-            ))
+            Text(isLoginMode
+                ? localization.localized(
+                    "Это имя уже занято. Введите пароль для входа.",
+                    "This username is taken. Enter password to sign in.")
+                : localization.localized(
+                    "Это ваш уникальный идентификатор в Finder.\nБез номера телефона, без почты.",
+                    "This is your unique Finder identifier.\nNo phone number, no email."))
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(isLoginMode ? .orange : .secondary)
             .multilineTextAlignment(.center)
             .offset(y: appear ? 0 : 20)
             .opacity(appear ? 1 : 0)
 
-            TextField(localization.localized("Имя пользователя", "Username"), text: $username)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .liquidGlassTextField()
-                .padding(.horizontal, 32)
-                .offset(y: appear ? 0 : 20)
-                .opacity(appear ? 1 : 0)
+            VStack(spacing: 12) {
+                TextField(localization.localized("Имя пользователя", "Username"), text: $username)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .liquidGlassTextField()
+                    .onChange(of: username) { _, _ in
+                        if isLoginMode {
+                            withAnimation(.spring(response: 0.3)) {
+                                isLoginMode = false
+                                password = ""
+                            }
+                        }
+                    }
+
+                SecureField(localization.localized("Пароль", "Password"), text: $password)
+                    .liquidGlassTextField()
+            }
+            .padding(.horizontal, 32)
+            .offset(y: appear ? 0 : 20)
+            .opacity(appear ? 1 : 0)
 
             Button {
                 validateUsername()
             } label: {
-                Text(localization.next)
+                Text(isLoginMode
+                    ? localization.localized("Войти", "Sign In")
+                    : localization.next)
                     .font(.headline)
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .liquidGlassButton()
             }
             .padding(.horizontal, 32)
-            .opacity(username.count >= 3 ? 1 : 0.5)
-            .disabled(username.count < 3)
+            .opacity(username.count >= 3 && password.count >= 4 ? 1 : 0.5)
+            .disabled(username.count < 3 || password.count < 4)
 
             // Terms & Privacy
             VStack(spacing: 2) {
@@ -443,7 +465,36 @@ struct FinderIDSetupView: View {
             showError = true
             return
         }
+        guard password.count >= 4 else {
+            errorMessage = localization.localized("Пароль минимум 4 символа", "Password minimum 4 characters")
+            showError = true
+            return
+        }
         username = trimmed
+
+        // Check if username already registered
+        if authService.isUsernameRegistered(trimmed) {
+            if !isLoginMode {
+                // First time seeing this username — switch to login mode
+                withAnimation(.spring(response: 0.3)) {
+                    isLoginMode = true
+                }
+                return
+            }
+            // Login mode — verify password
+            if authService.loginWithPassword(username: trimmed, password: password) {
+                // Successful login — restore account
+                authService.register(username: trimmed, displayName: authService.currentDisplayName.isEmpty ? trimmed : authService.currentDisplayName)
+                authService.completeOnboarding()
+            } else {
+                errorMessage = localization.localized("Неверный пароль", "Wrong password")
+                showError = true
+                HapticService.error()
+            }
+            return
+        }
+
+        // New registration — proceed to display name
         withAnimation(.spring(response: 0.5)) {
             step = .displayName
             appear = false
@@ -454,7 +505,7 @@ struct FinderIDSetupView: View {
     }
 
     private func createAccount() {
-        authService.register(username: username, displayName: displayName)
+        authService.register(username: username, displayName: displayName, password: password)
         generatedFinderID = authService.currentFinderID
         withAnimation(.spring(response: 0.5)) {
             step = .finderIDReveal
