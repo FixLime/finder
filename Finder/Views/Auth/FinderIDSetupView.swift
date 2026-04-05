@@ -4,8 +4,6 @@ struct FinderIDSetupView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var localization: LocalizationManager
-    @EnvironmentObject var chatService: ChatService
-
     @State private var username = ""
     @State private var displayName = ""
     @State private var step: SetupStep = .username
@@ -95,7 +93,7 @@ struct FinderIDSetupView: View {
             RestoreAccountView()
                 .environmentObject(authService)
                 .environmentObject(localization)
-                .environmentObject(chatService)
+                .environmentObject(ChatService.shared)
         }
         .sheet(isPresented: $showLegalSheet) {
             LegalSheetView(type: legalSheetType, localization: localization)
