@@ -1,48 +1,68 @@
 package com.finder.app.models
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-
-@Serializable
-data class ServerMessage(
-    val id: String,
-    @SerialName("chat_id") val chatId: String,
-    @SerialName("sender_id") val senderId: String,
-    val text: String,
-    @SerialName("message_type") val messageType: String? = null,
-    @SerialName("reply_to_id") val replyToId: String? = null,
-    @SerialName("is_edited") val isEdited: Boolean? = null,
-    @SerialName("created_at") val createdAt: String? = null,
-    val sender: ServerUser? = null
-)
+import java.io.Serializable
+import java.util.Date
+import java.util.UUID
 
 data class Message(
-    val id: String,
-    val chatId: String,
-    val senderId: String,
-    val text: String,
-    val timestamp: Long = System.currentTimeMillis(),
-    val messageType: String = "text",
-    val isRead: Boolean = false,
-    val isDelivered: Boolean = true,
-    val isEdited: Boolean = false,
-    val replyToId: String? = null,
-    val senderName: String? = null
-) {
-    fun isFromCurrentUser(currentUserId: String): Boolean = senderId == currentUserId
+    val id: UUID = UUID.randomUUID(),
+    val senderId: UUID,
+    val chatId: UUID,
+    var text: String,
+    val timestamp: Date,
+    var isRead: Boolean,
+    var isDelivered: Boolean,
+    var isEdited: Boolean,
+    var replyToId: UUID? = null,
+    var messageType: MessageType,
+    var isPhantom: Boolean,              // Disappears after reading
+    var selfDestructTime: Double? = null, // Self-destruct timer in seconds
+    var isForwardable: Boolean,
+    var encryptedPayload: EncryptedMessage? = null
+) : Serializable {
+
+    fun isFromCurrentUser(currentUserId: UUID): Boolean {
+        return senderId == currentUserId
+    }
+
+    companion object {
+        fun system(text: String, chatId: UUID): Message {
+            return Message(
+                id = UUID.randomUUID(),
+                senderId = UUID.randomUUID(),
+                chatId = chatId,
+                text = text,
+                timestamp = Date(),
+                isRead = true,
+                isDelivered = true,
+                isEdited = false,
+                replyToId = null,
+                messageType = MessageType.SYSTEM,
+                isPhantom = false,
+                selfDestructTime = null,
+                isForwardable = false,
+                encryptedPayload = null
+            )
+        }
+    }
 }
 
-fun ServerMessage.toMessage() = Message(
-    id = id,
-    chatId = chatId,
-    senderId = senderId,
-    text = text,
-    messageType = messageType ?: "text",
-    isEdited = isEdited ?: false,
-    replyToId = replyToId,
-    senderName = sender?.displayName,
-    timestamp = try {
-        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
-            .parse(createdAt ?: "")?.time ?: System.currentTimeMillis()
-    } catch (_: Exception) { System.currentTimeMillis() }
-)
+enum class MessageType(val rawValue: String) {
+    TEXT("text"),
+    IMAGE("image"),
+    VOICE("voice"),
+    SYSTEM("system"),
+    NOTE("note");
+
+    companion object {
+        fun fromString(value: String): MessageType {
+            return entries.firstOrNull { it.rawValue == value } ?: TEXT
+        }
+    }
+}
+
+data class EncryptedMessage(
+    val ciphertext: String,      // Base64 AES-256-GCM ciphertext
+    val nonce: String,           // Base64 nonce/IV
+    val senderPublicKey: String  // Base64 X25519 public key
+) : Serializable
