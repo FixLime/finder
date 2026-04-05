@@ -1,6 +1,5 @@
 package com.finder.app.ui.screens.onboarding
 
-import androidx.compose.animation.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -215,11 +214,12 @@ fun OnboardingScreen(
             ) {
                 repeat(totalPages) { index ->
                     val isSelected = pagerState.currentPage == index
-                    val width by animateDpAsState(
-                        targetValue = if (isSelected) 24.dp else 8.dp,
+                    val widthFloat by animateFloatAsState(
+                        targetValue = if (isSelected) 24f else 8f,
                         animationSpec = spring(dampingRatio = 0.7f, stiffness = 300f),
                         label = "dotWidth"
                     )
+                    val width = widthFloat.dp
                     Box(
                         modifier = Modifier
                             .padding(horizontal = 4.dp)
@@ -306,11 +306,12 @@ private fun OnboardingPageContent(
         animationSpec = tween(500),
         label = "alpha"
     )
-    val offsetY by animateDpAsState(
-        targetValue = if (appear) 0.dp else 20.dp,
+    val offsetYFloat by animateFloatAsState(
+        targetValue = if (appear) 0f else 20f,
         animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f),
         label = "textOffset"
     )
+    val offsetY = offsetYFloat.dp
 
     Column(
         modifier = Modifier
