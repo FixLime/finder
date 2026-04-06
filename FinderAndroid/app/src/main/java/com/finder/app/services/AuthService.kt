@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONArray
 import java.security.MessageDigest
 import java.util.UUID
 
@@ -67,13 +68,23 @@ object AuthService {
     private val _customBiometricEnabled = MutableStateFlow(false)
     val customBiometricEnabled: StateFlow<Boolean> = _customBiometricEnabled.asStateFlow()
 
+    private val _savedAccounts = MutableStateFlow<List<List<String>>>(emptyList())
+    val savedAccounts: StateFlow<List<List<String>>> = _savedAccounts.asStateFlow()
+
     val isAdmin: Boolean
         get() = _currentUsername.value == "awfulc"
+
+    val currentUserIsPremium: Boolean
+        get() = isPremium(_currentUsername.value)
+
+    val maxAccounts: Int
+        get() = if (currentUserIsPremium) 15 else 5
 
     fun init(application: Application) {
         prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         accountsPrefs = application.getSharedPreferences(ACCOUNTS_PREFS_NAME, Context.MODE_PRIVATE)
         loadState()
+        loadSavedAccounts()
     }
 
     private fun loadState() {
@@ -144,6 +155,7 @@ object AuthService {
         _isDeletedScreen.value = false
         _isDecoyMode.value = false
         saveState()
+        saveCurrentAccountToList()
     }
 
     fun logout() {
@@ -261,5 +273,98 @@ object AuthService {
     fun completeOnboarding() {
         _hasCompletedOnboarding.value = true
         saveState()
+    }
+
+    // MARK: - Saved Accounts
+
+    private fun loadSavedAccounts() {
+        val json = prefs.getString("saved_accounts_json", null) ?: return
+        try {
+            val jsonArray = JSONArray(json)
+            val accounts = mutableListOf<List<String>>()
+            for (i in 0 until jsonArray.length()) {
+                val entry = jsonArray.getJSONArray(i)
+                val account = mutableListOf<String>()
+                for (j in 0 until entry.length()) {
+                    account.add(entry.getString(j))
+                }
+                accounts.add(account)
+            }
+            _savedAccounts.value = accounts
+        } catch (_: Exception) {
+            _savedAccounts.value = emptyList()
+        }
+    }
+
+    private fun persistSavedAccounts() {
+        val jsonArray = JSONArray()
+        for (account in _savedAccounts.value) {
+            val entry = JSONArray()
+            for (field in account) {
+                entry.put(field)
+            }
+            jsonArray.put(entry)
+        }
+        prefs.edit().putString("saved_accounts_json", jsonArray.toString()).apply()
+    }
+
+    fun saveCurrentAccountToList() {
+        val username = _currentUsername.value
+        val displayName = _currentDisplayName.value
+        val finderID = _currentFinderID.value
+        if (username.isBlank()) return
+
+        val updated = _savedAccounts.value.filter { it.firstOrNull() != username }.toMutableList()
+        updated.add(0, listOf(username, displayName, finderID))
+        _savedAccounts.value = updated
+        persistSavedAccounts()
+    }
+
+    fun removeAccountFromList(username: String) {
+        _savedAccounts.value = _savedAccounts.value.filter { it.firstOrNull() != username }
+        persistSavedAccounts()
+    }
+
+    fun switchToAccount(account: List<String>) {
+        if (account.size < 3) return
+        saveCurrentAccountToList()
+
+        // Reset session
+        _isAuthenticated.value = false
+        _isPINLocked.value = false
+        _hasSetupPIN.value = false
+        _isDecoyMode.value = false
+        _isBannedScreen.value = false
+        _isDeletedScreen.value = false
+
+        // Load target account
+        _currentUsername.value = account[0]
+        _currentDisplayName.value = account[1]
+        _currentFinderID.value = account[2]
+        _isAuthenticated.value = true
+        _hasCompletedOnboarding.value = true
+        saveState()
+    }
+
+    // MARK: - Premium
+
+    fun isPremium(username: String): Boolean {
+        val raw = prefs.getString("premium_usernames", "") ?: ""
+        if (raw.isBlank()) return false
+        return raw.split(",").contains(username)
+    }
+
+    fun grantPremium(username: String) {
+        val raw = prefs.getString("premium_usernames", "") ?: ""
+        val set = if (raw.isBlank()) mutableSetOf() else raw.split(",").toMutableSet()
+        set.add(username)
+        prefs.edit().putString("premium_usernames", set.joinToString(",")).apply()
+    }
+
+    fun revokePremium(username: String) {
+        val raw = prefs.getString("premium_usernames", "") ?: ""
+        val set = if (raw.isBlank()) mutableSetOf() else raw.split(",").toMutableSet()
+        set.remove(username)
+        prefs.edit().putString("premium_usernames", set.joinToString(",")).apply()
     }
 }

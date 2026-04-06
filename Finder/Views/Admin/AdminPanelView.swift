@@ -278,6 +278,12 @@ struct AdminPanelView: View {
                     }
                 }
 
+                // MARK: - Rating & Premium section
+                Divider().padding(.horizontal)
+
+                ratingSection
+                premiumSection
+
                 Spacer(minLength: 100)
             }
             .padding(.top, 8)
@@ -308,6 +314,130 @@ struct AdminPanelView: View {
                 .environmentObject(themeManager)
                 .environmentObject(localization)
             }
+        }
+    }
+
+    // MARK: - Rating Section
+    @State private var ratingInput = ""
+
+    private var ratingSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.yellow)
+                Text(localization.localized("Рейтинг пользователя", "User Rating"))
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 20)
+
+            HStack(spacing: 10) {
+                HStack {
+                    Image(systemName: "star.fill")
+                        .foregroundStyle(.yellow)
+                    TextField(localization.localized("Очки рейтинга", "Rating points"), text: $ratingInput)
+                        .keyboardType(.numberPad)
+                }
+                .padding(12)
+                .liquidGlassCard(cornerRadius: 12)
+
+                Button {
+                    guard !usernameInput.isEmpty, let pts = Int(ratingInput) else { return }
+                    HapticService.mediumTap()
+                    // Rating is global (single user), set it
+                    RatingService.shared.setPoints(pts)
+                    withAnimation {
+                        actionResult = localization.localized(
+                            "Рейтинг установлен: \(pts) очков",
+                            "Rating set: \(pts) points"
+                        )
+                        showResult = true
+                    }
+                } label: {
+                    Text(localization.localized("Задать", "Set"))
+                        .font(.subheadline.bold())
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Capsule().fill(Color.yellow.opacity(0.8)))
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+
+    // MARK: - Premium Section
+    private var premiumSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.yellow)
+                Text("Finder Premium")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 20)
+
+            HStack(spacing: 10) {
+                Button {
+                    guard !usernameInput.isEmpty else { return }
+                    HapticService.mediumTap()
+                    AuthService.shared.grantPremium(usernameInput)
+                    withAnimation {
+                        actionResult = localization.localized(
+                            "Premium выдан @\(usernameInput)",
+                            "Premium granted to @\(usernameInput)"
+                        )
+                        showResult = true
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 12))
+                        Text(localization.localized("Выдать Premium", "Grant Premium"))
+                            .font(.caption.bold())
+                    }
+                    .foregroundStyle(usernameInput.isEmpty ? .secondary : .yellow)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .liquidGlassCard(cornerRadius: 12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(usernameInput.isEmpty ? Color.clear : Color.yellow.opacity(0.4), lineWidth: 1)
+                    )
+                }
+                .disabled(usernameInput.isEmpty)
+
+                Button {
+                    guard !usernameInput.isEmpty else { return }
+                    HapticService.mediumTap()
+                    AuthService.shared.revokePremium(usernameInput)
+                    withAnimation {
+                        actionResult = localization.localized(
+                            "Premium отозван @\(usernameInput)",
+                            "Premium revoked from @\(usernameInput)"
+                        )
+                        showResult = true
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "crown")
+                            .font(.system(size: 12))
+                        Text(localization.localized("Отозвать", "Revoke"))
+                            .font(.caption.bold())
+                    }
+                    .foregroundStyle(usernameInput.isEmpty ? .secondary : .red)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .liquidGlassCard(cornerRadius: 12)
+                }
+                .disabled(usernameInput.isEmpty)
+
+                Spacer()
+            }
+            .padding(.horizontal)
         }
     }
 

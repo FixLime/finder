@@ -24,6 +24,15 @@ class AuthService: ObservableObject {
         set { UserDefaults.standard.set(newValue, forKey: "registeredAccounts") }
     }
 
+    // Saved accounts for account manager: [[username, displayName, finderID]]
+    @Published var savedAccounts: [[String]] = []
+
+    // Premium users set
+    private var premiumUsernames: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "premiumUsernames") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: "premiumUsernames") }
+    }
+
     @Published var isAuthenticated: Bool = false
     @Published var isPINLocked: Bool = true
     @Published var currentUser: FinderUser?
@@ -46,6 +55,7 @@ class AuthService: ObservableObject {
     }
 
     private init() {
+        loadSavedAccounts()
         if isLoggedIn {
             // Проверяем бан/удаление при запуске
             if AdminService.shared.isBanned(currentUsername) {
@@ -211,9 +221,115 @@ class AuthService: ObservableObject {
 
         isAuthenticated = true
         isPINLocked = false
+
+        saveCurrentAccountToList()
     }
 
-    // Переключение аккаунта — полная очистка сессии
+    // MARK: - Account Manager
+
+    private func loadSavedAccounts() {
+        if let data = UserDefaults.standard.data(forKey: "savedAccountsList"),
+           let list = try? JSONDecoder().decode([[String]].self, from: data) {
+            savedAccounts = list
+        }
+    }
+
+    private func persistSavedAccounts() {
+        if let data = try? JSONEncoder().encode(savedAccounts) {
+            UserDefaults.standard.set(data, forKey: "savedAccountsList")
+        }
+    }
+
+    func saveCurrentAccountToList() {
+        guard !currentUsername.isEmpty else { return }
+        // Remove old entry for this username
+        savedAccounts.removeAll { $0.first?.lowercased() == currentUsername.lowercased() }
+        // Add at top
+        savedAccounts.insert([currentUsername, currentDisplayName, currentFinderID], at: 0)
+        persistSavedAccounts()
+    }
+
+    func removeAccountFromList(_ username: String) {
+        savedAccounts.removeAll { $0.first?.lowercased() == username.lowercased() }
+        persistSavedAccounts()
+    }
+
+    var maxAccounts: Int {
+        isPremium(currentUsername) ? 15 : 5
+    }
+
+    func switchToAccount(_ account: [String]) {
+        guard account.count >= 3 else { return }
+        let targetUsername = account[0]
+        let targetDisplayName = account[1]
+        let targetFinderID = account[2]
+
+        // Save current first
+        saveCurrentAccountToList()
+
+        // Reset session
+        currentUser = nil
+        isAuthenticated = false
+        isPINLocked = false
+        showDecoyAccount = false
+        isDecoyMode = false
+        isBannedScreen = false
+        isDeletedScreen = false
+
+        // Load target account
+        currentUsername = targetUsername
+        currentDisplayName = targetDisplayName
+        currentFinderID = targetFinderID
+        isLoggedIn = true
+
+        currentUser = FinderUser(
+            id: UUID(),
+            username: targetUsername,
+            displayName: targetDisplayName,
+            avatarIcon: "person.fill",
+            avatarColor: .blue,
+            statusText: "Использую Finder",
+            isOnline: true,
+            lastSeen: nil,
+            isVerified: AdminService.shared.isVerified(targetUsername),
+            isUntrusted: AdminService.shared.isUntrusted(targetUsername),
+            isBanned: false,
+            isDeleted: false,
+            finderID: targetFinderID,
+            joinDate: Date(),
+            privacySettings: .default
+        )
+
+        isAuthenticated = true
+        isPINLocked = false
+        hasCompletedOnboarding = true
+    }
+
+    // MARK: - Premium
+
+    func isPremium(_ username: String) -> Bool {
+        premiumUsernames.contains(username.lowercased())
+    }
+
+    func grantPremium(_ username: String) {
+        var set = premiumUsernames
+        set.insert(username.lowercased())
+        premiumUsernames = set
+        objectWillChange.send()
+    }
+
+    func revokePremium(_ username: String) {
+        var set = premiumUsernames
+        set.remove(username.lowercased())
+        premiumUsernames = set
+        objectWillChange.send()
+    }
+
+    var currentUserIsPremium: Bool {
+        isPremium(currentUsername)
+    }
+
+    // Переключение аккаунта — полная очистка сессии (legacy)
     func switchAccount(username: String, displayName: String) {
         // Сбрасываем текущую сессию
         currentUser = nil

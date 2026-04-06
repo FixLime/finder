@@ -49,4 +49,10 @@ class RatingService: ObservableObject {
         points = 0
         tier = 1
     }
+
+    // Admin: set points directly
+    func setPoints(_ value: Int) {
+        points = max(0, value)
+        recalculateTier()
+    }
 }

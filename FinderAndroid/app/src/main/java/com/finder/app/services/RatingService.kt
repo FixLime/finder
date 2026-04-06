@@ -54,6 +54,12 @@ object RatingService {
         _tier.value = if (_points.value >= TIER_2_THRESHOLD) 2 else 1
     }
 
+    fun setPoints(value: Int) {
+        _points.value = maxOf(0, value)
+        recalculateTier()
+        saveState()
+    }
+
     fun resetRating() {
         _points.value = 0
         _tier.value = 1
