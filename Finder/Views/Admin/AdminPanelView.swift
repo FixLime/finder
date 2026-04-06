@@ -399,7 +399,7 @@ struct AdminPanelView: View {
                         Text(localization.localized("Выдать Premium", "Grant Premium"))
                             .font(.caption.bold())
                     }
-                    .foregroundStyle(usernameInput.isEmpty ? .secondary : .yellow)
+                    .foregroundColor(usernameInput.isEmpty ? .secondary : .yellow)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .liquidGlassCard(cornerRadius: 12)
@@ -428,7 +428,7 @@ struct AdminPanelView: View {
                         Text(localization.localized("Отозвать", "Revoke"))
                             .font(.caption.bold())
                     }
-                    .foregroundStyle(usernameInput.isEmpty ? .secondary : .red)
+                    .foregroundColor(usernameInput.isEmpty ? .secondary : .red)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .liquidGlassCard(cornerRadius: 12)
