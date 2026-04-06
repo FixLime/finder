@@ -18,10 +18,22 @@ struct FinderIDSetupView: View {
     @State private var showLegalSheet = false
     @State private var legalSheetType = "terms" // "terms" or "privacy"
     @State private var isLoginMode = false // true when username already exists
+    @State private var selectedAvatarIcon = "person.fill"
+    @State private var selectedAvatarColor: AvatarColor = .blue
+
+    private let avatarIcons = [
+        "person.fill", "person.circle.fill", "star.fill", "heart.fill",
+        "bolt.fill", "flame.fill", "leaf.fill", "moon.fill",
+        "sun.max.fill", "cloud.fill", "snowflake", "drop.fill",
+        "pawprint.fill", "hare.fill", "cat.fill", "bird.fill",
+        "eye.fill", "hand.raised.fill", "crown.fill", "shield.fill",
+        "gamecontroller.fill", "headphones", "music.note", "guitars.fill"
+    ]
 
     enum SetupStep {
         case username
         case displayName
+        case avatarSetup
         case finderIDReveal
         case pinSetup
         case biometric
@@ -62,6 +74,8 @@ struct FinderIDSetupView: View {
                         usernameStep
                     case .displayName:
                         displayNameStep
+                    case .avatarSetup:
+                        avatarSetupStep
                     case .finderIDReveal:
                         finderIDRevealStep
                     case .pinSetup:
@@ -344,6 +358,114 @@ struct FinderIDSetupView: View {
         }
     }
 
+    private var avatarSetupStep: some View {
+        VStack(spacing: 24) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [selectedAvatarColor.color.opacity(0.3), selectedAvatarColor.color.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 100, height: 100)
+                Image(systemName: selectedAvatarIcon)
+                    .font(.system(size: 44))
+                    .foregroundStyle(selectedAvatarColor.color)
+            }
+            .scaleEffect(appear ? 1 : 0.5)
+            .opacity(appear ? 1 : 0)
+
+            Text(localization.localized("Выберите аватар", "Choose your avatar"))
+                .font(.title2.bold())
+                .offset(y: appear ? 0 : 20)
+                .opacity(appear ? 1 : 0)
+
+            Text(localization.localized(
+                "Иконка и цвет вашего профиля",
+                "Your profile icon and color"
+            ))
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .offset(y: appear ? 0 : 20)
+            .opacity(appear ? 1 : 0)
+
+            // Color picker
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(AvatarColor.allCases, id: \.self) { color in
+                        Circle()
+                            .fill(color.color)
+                            .frame(width: 36, height: 36)
+                            .overlay(
+                                Circle().stroke(Color.white, lineWidth: selectedAvatarColor == color ? 3 : 0)
+                            )
+                            .overlay(
+                                Circle().stroke(color.color.opacity(0.5), lineWidth: selectedAvatarColor == color ? 1 : 0)
+                                    .padding(-2)
+                            )
+                            .onTapGesture {
+                                HapticService.selection()
+                                withAnimation(.spring(response: 0.3)) {
+                                    selectedAvatarColor = color
+                                }
+                            }
+                    }
+                }
+                .padding(.horizontal, 32)
+            }
+            .offset(y: appear ? 0 : 20)
+            .opacity(appear ? 1 : 0)
+
+            // Icon grid
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 6), spacing: 12) {
+                ForEach(avatarIcons, id: \.self) { icon in
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(selectedAvatarIcon == icon ? selectedAvatarColor.color.opacity(0.2) : Color.gray.opacity(0.1))
+                        Image(systemName: icon)
+                            .font(.system(size: 20))
+                            .foregroundStyle(selectedAvatarIcon == icon ? selectedAvatarColor.color : .secondary)
+                    }
+                    .frame(height: 48)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(selectedAvatarIcon == icon ? selectedAvatarColor.color.opacity(0.5) : Color.clear, lineWidth: 1.5)
+                    )
+                    .onTapGesture {
+                        HapticService.selection()
+                        withAnimation(.spring(response: 0.3)) {
+                            selectedAvatarIcon = icon
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 32)
+            .offset(y: appear ? 0 : 20)
+            .opacity(appear ? 1 : 0)
+
+            Button {
+                authService.updateAvatar(icon: selectedAvatarIcon, color: selectedAvatarColor)
+                generatedFinderID = authService.currentFinderID
+                withAnimation(.spring(response: 0.5)) {
+                    step = .finderIDReveal
+                    appear = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        withAnimation(.spring(response: 0.5)) { appear = true }
+                    }
+                }
+            } label: {
+                Text(localization.next)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .liquidGlassButton()
+            }
+            .padding(.horizontal, 32)
+        }
+    }
+
     private var finderIDRevealStep: some View {
         VStack(spacing: 24) {
             FingerprintView(color: .cyan)
@@ -506,9 +628,8 @@ struct FinderIDSetupView: View {
 
     private func createAccount() {
         authService.register(username: username, displayName: displayName, password: password)
-        generatedFinderID = authService.currentFinderID
         withAnimation(.spring(response: 0.5)) {
-            step = .finderIDReveal
+            step = .avatarSetup
             appear = false
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 withAnimation(.spring(response: 0.5)) { appear = true }
@@ -534,7 +655,8 @@ struct FinderIDSetupView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             switch step {
             case .displayName: step = .username
-            case .finderIDReveal: step = .displayName
+            case .avatarSetup: step = .displayName
+            case .finderIDReveal: step = .avatarSetup
             case .pinSetup: step = .finderIDReveal
             case .biometric: step = .pinSetup
             default: break

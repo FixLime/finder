@@ -14,6 +14,8 @@ class AuthService: ObservableObject {
     @AppStorage("currentUsername") var currentUsername: String = ""
     @AppStorage("currentDisplayName") var currentDisplayName: String = ""
     @AppStorage("currentFinderID") var currentFinderID: String = ""
+    @AppStorage("currentAvatarIcon") var currentAvatarIcon: String = "person.fill"
+    @AppStorage("currentAvatarColor") var currentAvatarColorRaw: String = "blue"
     @AppStorage("storedPIN") private var storedPIN: String = ""
     @AppStorage("decoyPIN") var decoyPIN: String = ""
     @AppStorage("isDecoyMode") var isDecoyMode: Bool = false
@@ -31,6 +33,17 @@ class AuthService: ObservableObject {
     private var premiumUsernames: Set<String> {
         get { Set(UserDefaults.standard.stringArray(forKey: "premiumUsernames") ?? []) }
         set { UserDefaults.standard.set(Array(newValue), forKey: "premiumUsernames") }
+    }
+
+    // Avatar overrides per username: [username: "icon|color"]
+    private var userAvatars: [String: String] {
+        get { UserDefaults.standard.dictionary(forKey: "userAvatars") as? [String: String] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: "userAvatars") }
+    }
+
+    var currentAvatarColor: AvatarColor {
+        get { AvatarColor(rawValue: currentAvatarColorRaw) ?? .blue }
+        set { currentAvatarColorRaw = newValue.rawValue }
     }
 
     @Published var isAuthenticated: Bool = false
@@ -150,12 +163,13 @@ class AuthService: ObservableObject {
             isBannedScreen = false
             isDeletedScreen = false
 
+            let avatar = avatarForUser(restoredUsername)
             currentUser = FinderUser(
                 id: UUID(),
                 username: restoredUsername,
                 displayName: currentDisplayName,
-                avatarIcon: "person.fill",
-                avatarColor: .blue,
+                avatarIcon: avatar.icon,
+                avatarColor: avatar.color,
                 statusText: "Admin restored",
                 isOnline: true,
                 lastSeen: nil,
@@ -201,12 +215,13 @@ class AuthService: ObservableObject {
         isBannedScreen = false
         isDeletedScreen = false
 
+        loadUserAvatar()
         currentUser = FinderUser(
             id: UUID(),
             username: username,
             displayName: displayName,
-            avatarIcon: "person.fill",
-            avatarColor: .blue,
+            avatarIcon: currentAvatarIcon,
+            avatarColor: currentAvatarColor,
             statusText: "Использую Finder",
             isOnline: true,
             lastSeen: nil,
@@ -282,12 +297,14 @@ class AuthService: ObservableObject {
         currentFinderID = targetFinderID
         isLoggedIn = true
 
+        loadUserAvatar()
+        let avatar = avatarForUser(targetUsername)
         currentUser = FinderUser(
             id: UUID(),
             username: targetUsername,
             displayName: targetDisplayName,
-            avatarIcon: "person.fill",
-            avatarColor: .blue,
+            avatarIcon: avatar.icon,
+            avatarColor: avatar.color,
             statusText: "Использую Finder",
             isOnline: true,
             lastSeen: nil,
@@ -327,6 +344,53 @@ class AuthService: ObservableObject {
 
     var currentUserIsPremium: Bool {
         isPremium(currentUsername)
+    }
+
+    // MARK: - Avatar
+
+    func updateAvatar(icon: String, color: AvatarColor) {
+        currentAvatarIcon = icon
+        currentAvatarColor = color
+        // Persist per-user
+        var avatars = userAvatars
+        avatars[currentUsername.lowercased()] = "\(icon)|\(color.rawValue)"
+        userAvatars = avatars
+        // Update current user object
+        currentUser?.avatarIcon = icon
+        currentUser?.avatarColor = color
+        objectWillChange.send()
+    }
+
+    func setAvatarForUser(_ username: String, icon: String, color: AvatarColor) {
+        var avatars = userAvatars
+        avatars[username.lowercased()] = "\(icon)|\(color.rawValue)"
+        userAvatars = avatars
+        // If it's the current user, update live
+        if username.lowercased() == currentUsername.lowercased() {
+            currentAvatarIcon = icon
+            currentAvatarColor = color
+            currentUser?.avatarIcon = icon
+            currentUser?.avatarColor = color
+            objectWillChange.send()
+        }
+    }
+
+    func avatarForUser(_ username: String) -> (icon: String, color: AvatarColor) {
+        if let stored = userAvatars[username.lowercased()] {
+            let parts = stored.split(separator: "|")
+            if parts.count == 2 {
+                let icon = String(parts[0])
+                let color = AvatarColor(rawValue: String(parts[1])) ?? .blue
+                return (icon, color)
+            }
+        }
+        return ("person.fill", .blue)
+    }
+
+    private func loadUserAvatar() {
+        let avatar = avatarForUser(currentUsername)
+        currentAvatarIcon = avatar.icon
+        currentAvatarColorRaw = avatar.color.rawValue
     }
 
     // Переключение аккаунта — полная очистка сессии (legacy)
@@ -513,12 +577,13 @@ class AuthService: ObservableObject {
 
     private func loadCurrentUser() {
         if !currentUsername.isEmpty {
+            loadUserAvatar()
             currentUser = FinderUser(
                 id: UUID(),
                 username: currentUsername,
                 displayName: currentDisplayName,
-                avatarIcon: "person.fill",
-                avatarColor: .blue,
+                avatarIcon: currentAvatarIcon,
+                avatarColor: currentAvatarColor,
                 statusText: "Использую Finder",
                 isOnline: true,
                 lastSeen: nil,

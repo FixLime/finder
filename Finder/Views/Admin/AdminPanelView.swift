@@ -283,6 +283,7 @@ struct AdminPanelView: View {
 
                 ratingSection
                 premiumSection
+                avatarSection
 
                 Spacer(minLength: 100)
             }
@@ -436,6 +437,122 @@ struct AdminPanelView: View {
                 .disabled(usernameInput.isEmpty)
 
                 Spacer()
+            }
+            .padding(.horizontal)
+        }
+    }
+
+    // MARK: - Avatar Section
+    @State private var adminSelectedIcon = "person.fill"
+    @State private var adminSelectedColor: AvatarColor = .blue
+
+    private let adminAvatarIcons = [
+        "person.fill", "person.circle.fill", "star.fill", "heart.fill",
+        "bolt.fill", "flame.fill", "leaf.fill", "moon.fill",
+        "sun.max.fill", "cloud.fill", "snowflake", "drop.fill",
+        "pawprint.fill", "hare.fill", "cat.fill", "bird.fill",
+        "eye.fill", "hand.raised.fill", "crown.fill", "shield.fill",
+        "gamecontroller.fill", "headphones", "music.note", "guitars.fill"
+    ]
+
+    private var avatarSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.cyan)
+                Text(localization.localized("Аватар пользователя", "User Avatar"))
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 20)
+
+            VStack(spacing: 10) {
+                // Preview
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [adminSelectedColor.color.opacity(0.3), adminSelectedColor.color.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 60, height: 60)
+                    Image(systemName: adminSelectedIcon)
+                        .font(.system(size: 28))
+                        .foregroundStyle(adminSelectedColor.color)
+                }
+
+                // Color picker
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(AvatarColor.allCases, id: \.self) { color in
+                            Circle()
+                                .fill(color.color)
+                                .frame(width: 28, height: 28)
+                                .overlay(
+                                    Circle().stroke(Color.white, lineWidth: adminSelectedColor == color ? 2 : 0)
+                                )
+                                .onTapGesture {
+                                    HapticService.selection()
+                                    withAnimation(.spring(response: 0.3)) {
+                                        adminSelectedColor = color
+                                    }
+                                }
+                        }
+                    }
+                }
+
+                // Icon grid
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 8), spacing: 8) {
+                    ForEach(adminAvatarIcons, id: \.self) { icon in
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(adminSelectedIcon == icon ? adminSelectedColor.color.opacity(0.2) : Color.gray.opacity(0.1))
+                            Image(systemName: icon)
+                                .font(.system(size: 14))
+                                .foregroundStyle(adminSelectedIcon == icon ? adminSelectedColor.color : .secondary)
+                        }
+                        .frame(height: 36)
+                        .onTapGesture {
+                            HapticService.selection()
+                            withAnimation(.spring(response: 0.3)) {
+                                adminSelectedIcon = icon
+                            }
+                        }
+                    }
+                }
+
+                // Apply button
+                Button {
+                    guard !usernameInput.isEmpty else { return }
+                    HapticService.mediumTap()
+                    AuthService.shared.setAvatarForUser(usernameInput, icon: adminSelectedIcon, color: adminSelectedColor)
+                    withAnimation {
+                        actionResult = localization.localized(
+                            "Аватар установлен для @\(usernameInput)",
+                            "Avatar set for @\(usernameInput)"
+                        )
+                        showResult = true
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "person.crop.circle.fill")
+                            .font(.system(size: 12))
+                        Text(localization.localized("Установить аватар", "Set Avatar"))
+                            .font(.caption.bold())
+                    }
+                    .foregroundColor(usernameInput.isEmpty ? .secondary : .cyan)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .liquidGlassCard(cornerRadius: 12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(usernameInput.isEmpty ? Color.clear : Color.cyan.opacity(0.4), lineWidth: 1)
+                    )
+                }
+                .disabled(usernameInput.isEmpty)
             }
             .padding(.horizontal)
         }

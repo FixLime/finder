@@ -11,6 +11,7 @@ struct AccountSettingsView: View {
     @State private var showAccountManager = false
     @State private var showDeleteAccount = false
     @State private var showDeleteConfirm = false
+    @State private var showAvatarPicker = false
 
     var body: some View {
         ScrollView {
@@ -38,6 +39,9 @@ struct AccountSettingsView: View {
         .sheet(isPresented: $showAccountManager) {
             accountManagerSheet
         }
+        .sheet(isPresented: $showAvatarPicker) {
+            AvatarPickerSheet(authService: authService, localization: localization)
+        }
         .sheet(isPresented: $showDeleteAccount) {
             deleteAccountSheet
         }
@@ -58,6 +62,41 @@ struct AccountSettingsView: View {
             .padding(.bottom, 6)
 
             VStack(spacing: 0) {
+                // Avatar row
+                Button { showAvatarPicker = true } label: {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [authService.currentAvatarColor.color.opacity(0.3), authService.currentAvatarColor.color.opacity(0.1)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 44, height: 44)
+                            Image(systemName: authService.currentAvatarIcon)
+                                .font(.system(size: 20))
+                                .foregroundStyle(authService.currentAvatarColor.color)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(localization.localized("Аватар", "Avatar"))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Text(localization.localized("Нажмите, чтобы изменить", "Tap to change"))
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                }
+                Divider().padding(.leading, 56)
+
                 accountInfoRow(
                     icon: "person.fill",
                     iconColor: .blue,
@@ -281,11 +320,17 @@ struct AccountSettingsView: View {
                         HStack(spacing: 12) {
                             ZStack {
                                 Circle()
-                                    .fill(Color.blue.opacity(0.15))
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [authService.currentAvatarColor.color.opacity(0.3), authService.currentAvatarColor.color.opacity(0.1)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
                                     .frame(width: 44, height: 44)
-                                Text(String(authService.currentDisplayName.prefix(1)).uppercased())
-                                    .font(.headline.bold())
-                                    .foregroundStyle(.blue)
+                                Image(systemName: authService.currentAvatarIcon)
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(authService.currentAvatarColor.color)
                             }
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack(spacing: 4) {
@@ -331,13 +376,20 @@ struct AccountSettingsView: View {
                                     }
 
                                     HStack(spacing: 12) {
+                                        let acAvatar = authService.avatarForUser(username)
                                         ZStack {
                                             Circle()
-                                                .fill(accountColor(username).opacity(0.15))
+                                                .fill(
+                                                    LinearGradient(
+                                                        colors: [acAvatar.color.color.opacity(0.3), acAvatar.color.color.opacity(0.1)],
+                                                        startPoint: .topLeading,
+                                                        endPoint: .bottomTrailing
+                                                    )
+                                                )
                                                 .frame(width: 44, height: 44)
-                                            Text(String(displayName.prefix(1)).uppercased())
-                                                .font(.headline.bold())
-                                                .foregroundStyle(accountColor(username))
+                                            Image(systemName: acAvatar.icon)
+                                                .font(.system(size: 20))
+                                                .foregroundStyle(acAvatar.color.color)
                                         }
                                         VStack(alignment: .leading, spacing: 2) {
                                             HStack(spacing: 4) {
@@ -563,11 +615,6 @@ struct AccountSettingsView: View {
         }
     }
 
-    private func accountColor(_ username: String) -> Color {
-        let colors: [Color] = [.purple, .orange, .cyan, .green, .pink, .indigo]
-        let hash = abs(username.hashValue)
-        return colors[hash % colors.count]
-    }
 
     private func performSoftDelete() {
         authService.softDeleteAccount()
@@ -679,6 +726,129 @@ struct PremiumInfoSheet: View {
                 .frame(width: 20)
             Text(text)
                 .font(.subheadline)
+        }
+    }
+}
+
+// MARK: - Avatar Picker Sheet
+struct AvatarPickerSheet: View {
+    @ObservedObject var authService: AuthService
+    var localization: LocalizationManager
+    @Environment(\.dismiss) var dismiss
+    @State private var selectedIcon: String = ""
+    @State private var selectedColor: AvatarColor = .blue
+
+    private let avatarIcons = [
+        "person.fill", "person.circle.fill", "star.fill", "heart.fill",
+        "bolt.fill", "flame.fill", "leaf.fill", "moon.fill",
+        "sun.max.fill", "cloud.fill", "snowflake", "drop.fill",
+        "pawprint.fill", "hare.fill", "cat.fill", "bird.fill",
+        "eye.fill", "hand.raised.fill", "crown.fill", "shield.fill",
+        "gamecontroller.fill", "headphones", "music.note", "guitars.fill"
+    ]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Preview
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [selectedColor.color.opacity(0.3), selectedColor.color.opacity(0.1)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 100, height: 100)
+                        Image(systemName: selectedIcon)
+                            .font(.system(size: 44))
+                            .foregroundStyle(selectedColor.color)
+                    }
+                    .padding(.top, 16)
+
+                    // Color picker
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(localization.localized("Цвет", "Color"))
+                            .font(.caption.bold())
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(AvatarColor.allCases, id: \.self) { color in
+                                    Circle()
+                                        .fill(color.color)
+                                        .frame(width: 40, height: 40)
+                                        .overlay(
+                                            Circle().stroke(Color.white, lineWidth: selectedColor == color ? 3 : 0)
+                                        )
+                                        .overlay(
+                                            Circle().stroke(color.color.opacity(0.5), lineWidth: selectedColor == color ? 1 : 0)
+                                                .padding(-2)
+                                        )
+                                        .onTapGesture {
+                                            HapticService.selection()
+                                            withAnimation(.spring(response: 0.3)) {
+                                                selectedColor = color
+                                            }
+                                        }
+                                }
+                            }
+                        }
+                    }
+
+                    // Icon grid
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(localization.localized("Иконка", "Icon"))
+                            .font(.caption.bold())
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 6), spacing: 12) {
+                            ForEach(avatarIcons, id: \.self) { icon in
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(selectedIcon == icon ? selectedColor.color.opacity(0.2) : Color.gray.opacity(0.1))
+                                    Image(systemName: icon)
+                                        .font(.system(size: 22))
+                                        .foregroundStyle(selectedIcon == icon ? selectedColor.color : .secondary)
+                                }
+                                .frame(height: 52)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(selectedIcon == icon ? selectedColor.color.opacity(0.5) : Color.clear, lineWidth: 1.5)
+                                )
+                                .onTapGesture {
+                                    HapticService.selection()
+                                    withAnimation(.spring(response: 0.3)) {
+                                        selectedIcon = icon
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle(localization.localized("Аватар", "Avatar"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(localization.cancel) { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(localization.save) {
+                        authService.updateAvatar(icon: selectedIcon, color: selectedColor)
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear {
+                selectedIcon = authService.currentAvatarIcon
+                selectedColor = authService.currentAvatarColor
+            }
         }
     }
 }

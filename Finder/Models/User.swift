@@ -44,7 +44,7 @@ struct FinderUser: Codable, Identifiable, Hashable {
     }
 }
 
-enum AvatarColor: String, Codable, Hashable {
+enum AvatarColor: String, Codable, Hashable, CaseIterable {
     case blue, purple, green, orange, red, cyan, indigo, pink, gray
 
     var color: Color {
