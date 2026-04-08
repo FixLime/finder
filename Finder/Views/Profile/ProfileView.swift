@@ -182,6 +182,8 @@ struct UserProfileView: View {
             }
             .sheet(isPresented: $showReport) {
                 ReportUserView(reportedUser: user)
+                    .environmentObject(AuthService.shared)
+                    .environmentObject(localization)
             }
         }
         .onAppear {
